@@ -1,4 +1,5 @@
 import pandas as pd
+import os
 
 def convert_tsv_to_parquet(input_filepath, output_filepath):
     print(f"Lese Daten von {input_filepath}...")
@@ -22,7 +23,7 @@ def convert_tsv_to_parquet(input_filepath, output_filepath):
         header=None,
         names=column_names,
         engine='python',
-        encoding='latin-1'  # <-- Das hier hinzufügen!
+        encoding='latin-1'
     )
     
     print("Optimiere Datentypen...")
@@ -39,7 +40,12 @@ def convert_tsv_to_parquet(input_filepath, output_filepath):
     df['longitude'] = df['longitude'].astype('float32')
     df['timezone_offset'] = df['timezone_offset'].astype('int16')
     
-    # 4. Als Parquet speichern
+    # 4. Output-Ordner erstellen, falls nicht vorhanden
+    output_dir = os.path.dirname(output_filepath)
+    if output_dir and not os.path.exists(output_dir):
+        os.makedirs(output_dir, exist_ok=True)
+    
+    # 5. Als Parquet speichern
     print(f"Speichere als Parquet in {output_filepath}...")
     df.to_parquet(output_filepath, engine='pyarrow', index=False)
     
@@ -51,7 +57,7 @@ def convert_tsv_to_parquet(input_filepath, output_filepath):
 if __name__ == "__main__":
     # HIER DEINE DATEINAMEN EINTRAGEN
     # Zum Beispiel: 'dataset_TSMC2014_NYC.txt'
-    INPUT_FILE = "./dataset_tsmc2014/dataset_TSMC2014_NYC.txt" 
-    OUTPUT_FILE = "./dataset_tsmc2014/foursquare_checkins_nyc.parquet"
+    INPUT_FILE = "./dataset_tsmc2014/dataset_TSMC2014_TKY.txt" 
+    OUTPUT_FILE = "./dataset_tsmc2014/foursquare_checkins_tky.parquet"
     
     convert_tsv_to_parquet(INPUT_FILE, OUTPUT_FILE)
