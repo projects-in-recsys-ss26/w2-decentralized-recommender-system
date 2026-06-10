@@ -5,6 +5,7 @@ import pickle
 import os
 import uvicorn
 import httpx
+import pandas as pd
 from typing import Optional
 from dotenv import load_dotenv
 import asyncio
@@ -13,9 +14,11 @@ import time
 # .env Datei laden
 load_dotenv()
 
-MODEL_PATH = "trained_model.pkl"
+CATEGORY_RECOMMENDER_PATH = "trained_model.pkl"
 FOURSQUARE_API_KEY = os.getenv("FOURSQUARE_API_KEY")
 KMEANS_MODEL_PATH = "user_clustering_model.pkl"
+USER_FEATURES_PATH = "../data/user_partitioning.parquet"
+CHECKINS_FILE = "../data/foursquare_checkins_nyc.parquet"
 
 app = FastAPI()
 
@@ -29,8 +32,10 @@ app.add_middleware(
 )
 
 # Globaler State für das geladene Dictionary
-trained_model_dict = {}
+category_model_dict = {}
 kmeans_clustering_model = None
+user_features_df = None
+checkins_df = None
 
 @app.on_event("startup")
 def load_model_on_startup():
@@ -38,16 +43,16 @@ def load_model_on_startup():
     Lädt das fertige Modell beim Starten der API einmalig aus der Datei.
     Es findet kein Training statt.
     """
-    global trained_model_dict, kmeans_clustering_model
+    global category_model_dict, kmeans_clustering_model, user_features_df, checkins_df
     print("Starte API-Server...")
     
-    if os.path.exists(MODEL_PATH):
-        with open(MODEL_PATH, 'rb') as f:
-            trained_model_dict = pickle.load(f)
+    if os.path.exists(CATEGORY_RECOMMENDER_PATH):
+        with open(CATEGORY_RECOMMENDER_PATH, 'rb') as f:
+            category_model_dict = pickle.load(f)
         print("=== Time-Based Modell erfolgreich aus Datei geladen! 🚀 ===")
     else:
-        print(f"⚠️ FEHLER: '{MODEL_PATH}' wurde nicht gefunden! Bitte führe zuerst main.py aus.")
-        trained_model_dict = {}
+        print(f"⚠️ FEHLER: '{CATEGORY_RECOMMENDER_PATH}' wurde nicht gefunden! Bitte führe zuerst main.py aus.")
+        category_model_dict = {}
     
     if os.path.exists(KMEANS_MODEL_PATH):
         with open(KMEANS_MODEL_PATH, 'rb') as f:
@@ -55,6 +60,18 @@ def load_model_on_startup():
         print("=== K-Means Clustering Modell erfolgreich aus Datei geladen! 🚀 ===")
     else:
         print(f"⚠️ WARNUNG: '{KMEANS_MODEL_PATH}' wurde nicht gefunden. Cluster-basierte Recs nicht verfügbar.")
+    
+    if os.path.exists(USER_FEATURES_PATH):
+        user_features_df = pd.read_parquet(USER_FEATURES_PATH)
+        print(f"=== User-Features geladen! ({len(user_features_df)} Users) ===")
+    else:
+        print(f"⚠️ WARNUNG: '{USER_FEATURES_PATH}' wurde nicht gefunden.")
+    
+    if os.path.exists(CHECKINS_FILE):
+        checkins_df = pd.read_parquet(CHECKINS_FILE)
+        print(f"=== Checkins-Daten geladen! ({len(checkins_df)} Checkins) ===")
+    else:
+        print(f"⚠️ WARNUNG: '{CHECKINS_FILE}' wurde nicht gefunden.")
 
 
 @app.get("/api/recommendations")
@@ -66,7 +83,7 @@ def get_recommendations(hour: int = None):
         hour = datetime.now().hour
 
     # Inferenz ist jetzt ein extrem schneller Dictionary-Lookup O(1)
-    top_categories = trained_model_dict.get(hour, [])
+    top_categories = category_model_dict.get(hour, [])
 
     return {
         "requested_hour": hour,
@@ -91,7 +108,7 @@ def get_recommendations_by_cluster(hour: int = None, cluster: int = None):
     
     if cluster is None:
         # Fallback auf globale Recommendations
-        top_categories = trained_model_dict.get(hour, [])
+        top_categories = category_model_dict.get(hour, [])
         return {
             "requested_hour": hour,
             "cluster": None,
@@ -101,7 +118,7 @@ def get_recommendations_by_cluster(hour: int = None, cluster: int = None):
     
     # Cluster-basierte Recommendations
     # Das Dictionary hat jetzt Struktur: {cluster: {hour: [categories]}}
-    cluster_data = trained_model_dict.get(cluster, {})
+    cluster_data = category_model_dict.get(cluster, {})
     top_categories = cluster_data.get(hour, []) if isinstance(cluster_data, dict) else []
     
     return {
@@ -139,6 +156,109 @@ async def predict_user_cluster(user_categories: dict):
         }
     except Exception as e:
         print(f"❌ Exception in predict_user_cluster: {str(e)}")
+        return {"error": str(e)}
+
+
+@app.get("/api/example-user-recommendations")
+def get_example_user_recommendations(user_index: int = 0, hour: int = None):
+    """
+    Nimmt einen Example-User aus den Daten (basierend auf user_index),
+    berechnet seinen Cluster und gibt Cluster-basierte Recommendations.
+    
+    Args:
+        user_index: Index des Users in der user_features_df (0-indexed)
+        hour: Stunde (0-23). Falls None, wird aktuelle Stunde verwendet.
+        
+    Returns:
+        Dictionary mit:
+        - User-Info (user_id, Kategorien-Verteilung)
+        - Predicted Cluster
+        - Cluster-basierte Recommendations
+    """
+    if hour is None:
+        hour = datetime.now().hour
+    
+    if user_features_df is None or len(user_features_df) == 0:
+        return {"error": "User-Features nicht geladen"}
+    
+    if user_index < 0 or user_index >= len(user_features_df):
+        return {"error": f"User-Index out of range. Max: {len(user_features_df)-1}"}
+    
+    try:
+        # 1. User aus user_features_df holen
+        user_row = user_features_df.iloc[user_index]
+        user_id = user_row['user_id']
+        predicted_cluster = int(user_row['cluster'])
+        
+        # 2. Kategorien-Verteilung des Users extrahieren
+        # user_features_df hat Spalten: user_id, cluster, und die 9 feature-Spalten
+        feature_columns = [col for col in user_features_df.columns if col not in ['user_id', 'cluster']]
+        user_categories = {col: float(user_row[col]) for col in feature_columns}
+        
+        # 3. Recommendations basierend auf Cluster + Hour
+        cluster_data = category_model_dict.get(predicted_cluster, {})
+        top_categories = cluster_data.get(hour, []) if isinstance(cluster_data, dict) else []
+        
+        # 4. Stats des Users
+        if checkins_df is not None:
+            user_checkins = checkins_df[checkins_df['user_id'] == user_id]
+            num_checkins = len(user_checkins)
+        else:
+            num_checkins = "unknown"
+        
+        return {
+            "user_index": user_index,
+            "user_id": int(user_id),
+            "num_checkins": num_checkins,
+            "category_distribution": user_categories,
+            "predicted_cluster": predicted_cluster,
+            "requested_hour": hour,
+            "recommendations": {
+                "top_3_categories": top_categories,
+                "cluster_data": cluster_data,
+                "type": "cluster_specific"
+            }
+        }
+    
+    except Exception as e:
+        print(f"❌ Exception in get_example_user_recommendations: {str(e)}")
+        return {"error": str(e)}
+
+
+@app.get("/api/example-users-list")
+def get_example_users_list(limit: int = 10):
+    """
+    Gibt eine Liste von Example-Users mit ihren Cluster-Zuweisungen.
+    
+    Args:
+        limit: Maximale Anzahl von Users in der Liste
+        
+    Returns:
+        Liste von Users mit Index, ID und Cluster
+    """
+    if user_features_df is None or len(user_features_df) == 0:
+        return {"error": "User-Features nicht geladen"}
+    
+    try:
+        limit = min(limit, len(user_features_df))
+        users_list = []
+        
+        for idx in range(limit):
+            user_row = user_features_df.iloc[idx]
+            users_list.append({
+                "index": idx,
+                "user_id": int(user_row['user_id']),
+                "cluster": int(user_row['cluster']),
+                "url": f"/api/example-user-recommendations?user_index={idx}"
+            })
+        
+        return {
+            "total_users": len(user_features_df),
+            "users": users_list
+        }
+    
+    except Exception as e:
+        print(f"❌ Exception in get_example_users_list: {str(e)}")
         return {"error": str(e)}
 
 

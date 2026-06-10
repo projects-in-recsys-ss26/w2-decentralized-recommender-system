@@ -90,11 +90,11 @@ export function MapView() {
     // Fetch recommendations from backend
     const fetchRecommendations = async () => {
       try {
-        const response = await fetch(`http://localhost:8000/api/recommendations?hour=${currentHour}`);
+        const response = await fetch(`http://localhost:8000/api/example-user-recommendations?hour=${currentHour}`);
         const data = await response.json();
         console.log("📍 Backend Response:", data);
-        console.log("🎯 Top 3 Kategorien:", data.top_3_categories);
-        setRecommendations(data.top_3_categories || []);
+        console.log("🎯 Top 3 Kategorien:", data.recommendations["top_3_categories"]);
+        setRecommendations(data.recommendations["top_3_categories"] || []);
       } catch (error) {
         console.error("❌ Fehler beim Abrufen der Empfehlungen:", error);
       } finally {
@@ -191,12 +191,6 @@ export function MapView() {
             >
               <Popup className="!p-0 border-none overflow-hidden rounded-xl shadow-lg m-0 w-[180px]">
                 <div className="flex flex-col">
-                  {/* Platzhalter Unsplash Bild passend zur Kategorie */}
-                  <img 
-                    src={`https://images.unsplash.com/photo-1555396273-367ea4eb4db5?auto=format&fit=crop&q=80&w=400`} 
-                    alt={place.name} 
-                    className="w-full h-24 object-cover"
-                  />
                   <div className="p-3 bg-white">
                     <div className="flex justify-between items-start mb-1 gap-1">
                       <h3 className="font-bold text-gray-900 leading-tight text-sm break-words flex-1">{place.name}</h3>

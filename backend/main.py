@@ -5,10 +5,10 @@ from src.user_clustering import UserPartitioningRecommender
 from src.preprocess_data import pipeline
 from src.visualize_trajectory import plot_user_trajectory
 
-CHECKINS_FILE = "C:\\Users\\Mattes\\Studium\\Semester 10\\Projekt\\masterproject-decentralized-recommender-systems\\backend\\data\\foursquare_checkins_nyc.parquet"
-CATEGORIES_FILE = "C:\\Users\\Mattes\\Studium\\Semester 10\\Projekt\\masterproject-decentralized-recommender-systems\\backend\\data\\foursquare_categories.parquet"
+CHECKINS_FILE = "C:\\Users\\Mattes\\Studium\\Semester 10\\Projekt\\masterproject-decentralized-recommender-systems\\data\\foursquare_checkins_nyc.parquet"
+CATEGORIES_FILE = "C:\\Users\\Mattes\\Studium\\Semester 10\\Projekt\\masterproject-decentralized-recommender-systems\\data\\foursquare_categories.parquet"
 MODEL_OUTPUT_PATH = "trained_model.pkl"  # Pfad für die Modelldatei
-USER_FEATURES_PATH = "data/user_partitioning.parquet"  # User-Features Parquet
+USER_FEATURES_PATH = "C:\\Users\\Mattes\\Studium\\Semester 10\\Projekt\\masterproject-decentralized-recommender-systems\\data\\user_partitioning.parquet"  # User-Features Parquet
 KMEANS_MODEL_PATH = "user_clustering_model.pkl"  # K-Means Modell
 
 def save_model_dictionary(model_dict, filepath):
@@ -73,14 +73,14 @@ def main():
     # 5. Stündliche Empfehlungen ausgeben (Global + Pro Cluster)
     print("\n" + "="*70)
     model.print_hourly_recommendations()
-    print("\nBeispiel: Empfehlungen für Cluster 0:")
-    model.print_hourly_recommendations(user_cluster=0)
+    print("\nBeispiel: Empfehlungen für Cluster 7:")
+    model.print_hourly_recommendations(user_cluster=7)
     print("\nBeispiel: Empfehlungen für Cluster 9:")
     model.print_hourly_recommendations(user_cluster=9)
     print("="*70)
     
     # 6. Das Dictionary aus dem Modell extrahieren und speichern
-    trained_dict = model.popular_specific_by_hour 
+    trained_dict = model.popular_specific_by_hour_and_cluster 
     save_model_dictionary(trained_dict, MODEL_OUTPUT_PATH)
     
     print("\n🎉 TRAINING COMPLETE!")
