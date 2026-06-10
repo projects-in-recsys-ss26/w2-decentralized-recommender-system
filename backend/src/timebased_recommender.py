@@ -47,3 +47,32 @@ class TimeBasedBaselineRecommender:
             'specific': rec_specific,
             'level_1': rec_level1
         }
+    
+    def print_hourly_recommendations(self):
+        """Gibt die stündlichen Empfehlungen (Specific) zweispaltig im Terminal aus."""
+        if not self.popular_specific_by_hour:
+            print("Das Modell wurde noch nicht trainiert (Dictionary ist leer).")
+            return
+
+        print("\nTop-Kategorien im Tagesverlauf:")
+        print("-" * 75)
+        
+        # 12 Zeilen für 24 Stunden (Spalte 1: 0-11 Uhr, Spalte 2: 12-23 Uhr)
+        for i in range(12):
+            # Linke Spalte (00:00 bis 11:00)
+            hour_left = i
+            cat_left = self.popular_specific_by_hour.get(hour_left, [])
+            cat_str_left = cat_left[0] if cat_left else "-"
+            str_left = f"{hour_left:02d}:00  ➔  {cat_str_left}"
+            
+            # Rechte Spalte (12:00 bis 23:00)
+            hour_right = i + 12
+            cat_right = self.popular_specific_by_hour.get(hour_right, [])
+            cat_str_right = cat_right[0] if cat_right else "-"
+            str_right = f"{hour_right:02d}:00  ➔  {cat_str_right}"
+            
+            # Linke Spalte wird mit ljust() auf 35 Zeichen aufgefüllt, 
+            # damit die rechte Spalte immer exakt an der gleichen Stelle beginnt.
+            print(f"{str_left.ljust(35)} |   {str_right}")
+            
+        print("-" * 75)

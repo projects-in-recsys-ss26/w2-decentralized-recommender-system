@@ -96,7 +96,7 @@ def print_statistics(df: pd.DataFrame) -> None:
     num_level1_cats = df['level_1'].nunique()
     
     print(f"🏪 Unique Venues (Locations): {num_venues}")
-    print(f"🏷️ Unique Specific Categories: {num_specific_cats}")
+    print(f"🏷️  Unique Specific Categories: {num_specific_cats}")
     print(f"🌍 Unique Level-1 Categories: {num_level1_cats}")
     
     # Check-ins per user
@@ -142,6 +142,31 @@ def print_statistics(df: pd.DataFrame) -> None:
     
     print("="*50 + "\n")
 
+def filter_tourist_categories(df: pd.DataFrame) -> pd.DataFrame:
+    """
+    Filters out non-tourist level-1 categories to clean up the dataset 
+    for a tourist recommender system.
+    """
+    print("Filtering out non-tourist categories...")
+    
+    # Die Liste der Level 1 Kategorien, die wir NICHT wollen
+    categories_to_remove = [
+        "Health and Medicine",
+        "Community and Government",
+        "Business and Professional Services",
+        "Travel and Transportation"
+    ]
+    
+    initial_rows = len(df)
+    
+    # ~ bedeutet "NICHT". Wir behalten also alle Zeilen, die NICHT in der Liste sind.
+    filtered_df = df[~df['level_1'].isin(categories_to_remove)].copy()
+    
+    dropped_rows = initial_rows - len(filtered_df)
+    print(f"✅ Removed {dropped_rows} non-tourist check-ins.")
+    
+    return filtered_df
+
 def pipeline(checkins_path: str, categories_path: str):
     """Main pipeline, controlling everything."""
     print("=== Starting Data Preprocessing ===")
@@ -156,8 +181,11 @@ def pipeline(checkins_path: str, categories_path: str):
     # 3. Merge
     df_final = merge_categories(df_checkins, df_categories)
 
-    # 4. Print statistics
+    # 4. Filter non-tourist locations
+    df_final = filter_tourist_categories(df_final)
+
+    # 5. Print statistics
     print_statistics(df_final)
     
-    # 5. Return 
+    # 6. Return 
     return df_final

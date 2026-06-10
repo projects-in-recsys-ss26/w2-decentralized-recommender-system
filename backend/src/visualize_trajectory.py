@@ -12,7 +12,12 @@ def plot_user_trajectory(df: pd.DataFrame, user_id: int, output_html: str = "use
         print(f"⚠️ No data found for User {user_id}.")
         return
         
-    user_df = user_df.sort_values(by='utc_time')
+    # Timestamp to local time -> WICHTIG: Wende es auf user_df an, nicht auf df!
+    user_df['utc_time'] = pd.to_datetime(user_df['utc_time']).dt.tz_localize(None)
+    user_df['local_time'] = user_df['utc_time'] + pd.to_timedelta(user_df['timezone_offset'], unit='m')
+    
+    # Jetzt sortieren
+    user_df = user_df.sort_values(by='local_time')
     
     center_lat = user_df['latitude'].mean()
     center_lon = user_df['longitude'].mean()
@@ -41,7 +46,7 @@ def plot_user_trajectory(df: pd.DataFrame, user_id: int, output_html: str = "use
     
     # Marker für alle Check-ins
     for check_idx, row in enumerate(user_df.itertuples(), 1):
-        formatted_time = row.utc_time.strftime('%Y-%m-%d %H:%M')
+        formatted_time = row.local_time.strftime('%Y-%m-%d %H:%M')
         popup_text = f"<b>No:</b> {check_idx}<br><b>Category:</b> {row.venue_category_name}<br><b>Time:</b> {formatted_time}"
         
         folium.CircleMarker(
@@ -60,7 +65,7 @@ def plot_user_trajectory(df: pd.DataFrame, user_id: int, output_html: str = "use
     # ==============================================================
     # EBENE 2: Die einzelnen Tage
     # ==============================================================
-    user_df['date'] = pd.to_datetime(user_df['utc_time']).dt.date
+    user_df['date'] = pd.to_datetime(user_df['local_time']).dt.date
     days = sorted(user_df['date'].unique())
     
     print(f"Found {len(days)} days of data: {days}")
@@ -82,7 +87,7 @@ def plot_user_trajectory(df: pd.DataFrame, user_id: int, output_html: str = "use
         ).add_to(fg)
         
         for check_idx, row in enumerate(day_df.itertuples(), 1):
-            formatted_time = row.utc_time.strftime('%Y-%m-%d %H:%M')
+            formatted_time = row.local_time.strftime('%Y-%m-%d %H:%M')
             popup_text = f"<b>Category:</b> {row.venue_category_name}<br><b>Time:</b> {formatted_time}"
             
             folium.CircleMarker(
@@ -219,3 +224,5 @@ def plot_user_trajectory(df: pd.DataFrame, user_id: int, output_html: str = "use
     full_path = os.path.abspath(output_html)
     print("🌍 Opening map in browser...")
     webbrowser.open(f"file://{full_path}")
+
+    print("Done")

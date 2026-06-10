@@ -13,24 +13,24 @@ def main():
     print("=== Preprocessing done successfully! 🎉 ===\n")
     
     # -- Visualisierung -------------------------------------------------------
-    # print("Start visualisation...")
+    print("Start visualisation...")
     
-    # # Wir holen uns dynamisch die erste User_ID, die im Datensatz vorkommt
-    # test_user_id = checkin_df['user_id'].iloc[0]
+    # Wir holen uns dynamisch die erste User_ID, die im Datensatz vorkommt
+    test_user_id = checkin_df['user_id'].iloc[0]
     
-    # # Karte generieren
-    # plot_user_trajectory(
-    #     df=checkin_df, 
-    #     user_id=test_user_id, 
-    #     output_html="nyc_user_map.html"
-    # )
+    # Karte generieren
+    plot_user_trajectory(
+        df=checkin_df, 
+        user_id=test_user_id, 
+        output_html="nyc_user_map.html"
+    )
 
     # -- Recommendations-------------------------------------------------------
     # 1. Daten splitten
     train_df, val_df, test_df = split_data_chronologically(checkin_df, train_ratio=0.6, val_ratio=0.2)
 
     # 2. Modell initialisieren (wir wollen z. B. die Top 5 Kategorien)
-    model = TimeBasedBaselineRecommender(top_k=5)
+    model = TimeBasedBaselineRecommender(top_k=3)
 
     # 3. Modell auf TRAIN-Daten trainieren
     model.fit(train_df)
@@ -38,6 +38,9 @@ def main():
     # 4. Modell auf TEST-Daten evaluieren
     # (Validation nutzen wir aktuell noch nicht, die wird erst wichtig, wenn wir Hyperparameter anpassen)
     evaluate_recommender(model, test_df)
+
+    # 5. Stündliche Empfehlungen ausgeben
+    model.print_hourly_recommendations()
     
     
 if __name__ == "__main__":
