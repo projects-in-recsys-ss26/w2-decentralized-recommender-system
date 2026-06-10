@@ -13,6 +13,7 @@ interface FoursquarePlace {
   lng: number;
   category: string;
   address?: string;
+  website?: string;
 }
 
 // Create custom icons using DivIcon for Tailwind styling compatibility
@@ -143,7 +144,8 @@ export function MapView() {
               lat: place.lat,
               lng: place.lng,
               category: category,
-              address: place.address
+              address: place.address,
+              website: place.website
             });
           }
         } catch (error) {
@@ -200,7 +202,17 @@ export function MapView() {
                       <h3 className="font-bold text-gray-900 leading-tight text-sm break-words flex-1">{place.name}</h3>
                     </div>
                     <p className="text-[11px] text-gray-500 line-clamp-2">{place.address}</p>
-                    <span className="inline-block mt-2 text-[9px] bg-slate-100 text-slate-600 font-semibold px-2 py-0.5 rounded-full">
+                    {place.website && (
+                      <a 
+                        href={place.website} 
+                        target="_blank" 
+                        rel="noopener noreferrer"
+                        className="inline-block mt-2 text-[9px] bg-blue-100 text-blue-600 font-semibold px-2 py-0.5 rounded-full hover:bg-blue-200 transition-colors"
+                      >
+                        Website besuchen ↗
+                      </a>
+                    )}
+                    <span className="inline-block mt-2 ml-2 text-[9px] bg-slate-100 text-slate-600 font-semibold px-2 py-0.5 rounded-full">
                       Kategorie: {place.category}
                     </span>
                   </div>

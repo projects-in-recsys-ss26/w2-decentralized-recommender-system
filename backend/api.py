@@ -15,6 +15,7 @@ load_dotenv()
 
 MODEL_PATH = "trained_model.pkl"
 FOURSQUARE_API_KEY = os.getenv("FOURSQUARE_API_KEY")
+KMEANS_MODEL_PATH = "user_clustering_model.pkl"
 
 app = FastAPI()
 
@@ -29,6 +30,7 @@ app.add_middleware(
 
 # Globaler State für das geladene Dictionary
 trained_model_dict = {}
+kmeans_clustering_model = None
 
 @app.on_event("startup")
 def load_model_on_startup():
@@ -36,17 +38,23 @@ def load_model_on_startup():
     Lädt das fertige Modell beim Starten der API einmalig aus der Datei.
     Es findet kein Training statt.
     """
-    global trained_model_dict
+    global trained_model_dict, kmeans_clustering_model
     print("Starte API-Server...")
     
     if os.path.exists(MODEL_PATH):
         with open(MODEL_PATH, 'rb') as f:
             trained_model_dict = pickle.load(f)
-        print("=== Modell erfolgreich aus Datei geladen! 🚀 ===")
+        print("=== Time-Based Modell erfolgreich aus Datei geladen! 🚀 ===")
     else:
         print(f"⚠️ FEHLER: '{MODEL_PATH}' wurde nicht gefunden! Bitte führe zuerst main.py aus.")
-        # Optional: Leeres Dictionary als Fallback, damit die API nicht abstürzt
         trained_model_dict = {}
+    
+    if os.path.exists(KMEANS_MODEL_PATH):
+        with open(KMEANS_MODEL_PATH, 'rb') as f:
+            kmeans_clustering_model = pickle.load(f)
+        print("=== K-Means Clustering Modell erfolgreich aus Datei geladen! 🚀 ===")
+    else:
+        print(f"⚠️ WARNUNG: '{KMEANS_MODEL_PATH}' wurde nicht gefunden. Cluster-basierte Recs nicht verfügbar.")
 
 
 @app.get("/api/recommendations")
@@ -64,6 +72,74 @@ def get_recommendations(hour: int = None):
         "requested_hour": hour,
         "top_3_categories": top_categories
     }
+
+
+@app.get("/api/recommendations/cluster")
+def get_recommendations_by_cluster(hour: int = None, cluster: int = None):
+    """
+    Nimmt die Stunde und User-Cluster entgegen und gibt die Top 3 Kategorien zurück.
+    
+    Args:
+        hour: Stunde (0-23). Falls None, wird aktuelle Stunde verwendet.
+        cluster: User-Cluster (0-9). Falls None, gibt Global-Recommendations.
+        
+    Returns:
+        Dictionary mit Recommendations basierend auf Cluster + Hour
+    """
+    if hour is None:
+        hour = datetime.now().hour
+    
+    if cluster is None:
+        # Fallback auf globale Recommendations
+        top_categories = trained_model_dict.get(hour, [])
+        return {
+            "requested_hour": hour,
+            "cluster": None,
+            "top_3_categories": top_categories,
+            "type": "global"
+        }
+    
+    # Cluster-basierte Recommendations
+    # Das Dictionary hat jetzt Struktur: {cluster: {hour: [categories]}}
+    cluster_data = trained_model_dict.get(cluster, {})
+    top_categories = cluster_data.get(hour, []) if isinstance(cluster_data, dict) else []
+    
+    return {
+        "requested_hour": hour,
+        "cluster": cluster,
+        "top_3_categories": top_categories,
+        "type": "cluster_specific"
+    }
+
+
+@app.post("/api/user-cluster")
+async def predict_user_cluster(user_categories: dict):
+    """
+    Sagt den Cluster für einen User vorher basierend auf seiner Kategorien-Verteilung.
+    
+    Input Example:
+    {
+        "Retail": 0.3,
+        "Dining and Drinking": 0.5,
+        "Arts and Entertainment": 0.1,
+        ...
+    }
+    
+    Returns:
+        Dictionary mit predicted cluster (0-9)
+    """
+    if kmeans_clustering_model is None:
+        return {"error": "K-Means Clustering Modell nicht geladen"}
+    
+    try:
+        cluster = kmeans_clustering_model.predict_user_cluster(user_categories)
+        return {
+            "predicted_cluster": int(cluster),
+            "confidence": "high"  # Kann später erweitert werden
+        }
+    except Exception as e:
+        print(f"❌ Exception in predict_user_cluster: {str(e)}")
+        return {"error": str(e)}
 
 
 @app.get("/api/foursquare/search")
@@ -89,7 +165,7 @@ async def search_foursquare(
             "ll": f"{lat},{lng}",
             "radius": str(radius),
             "limit": str(limit),
-            "fields": "fsq_place_id,name,latitude,longitude,location"
+            "fields": "fsq_place_id,name,latitude,longitude,location,website"
         }
         
         headers = {
@@ -123,6 +199,7 @@ async def search_foursquare(
                     "lat": place.get("latitude"),
                     "lng": place.get("longitude"),
                     "address": place.get("location", {}).get("formatted_address", "No address"),
+                    "website": place.get("website"),
                 }
                 formatted_results.append(formatted_place)
                 print(f"✅ Place found: {formatted_place['name']} ({formatted_place['id']})")
