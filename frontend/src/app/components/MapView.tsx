@@ -4,6 +4,7 @@ import { useNavigate } from "react-router";
 import { MapContainer, TileLayer, Marker, Popup } from "react-leaflet";
 import L from "leaflet";
 import { useNotification } from "./NotificationContext";
+import categoryLevel1Map from '../../../../data/category_level1_map.json'
 
 // Interface für die Foursquare Orte im State
 interface FoursquarePlace {
@@ -35,36 +36,85 @@ const createUserIcon = () => {
   });
 };
 
-const createRecommendationIcon = (label: string) => {
-  // Dynamische Farbwahl basierend auf dem Kategorienamen
-  const lowerLabel = label.toLowerCase();
-  let bgColor = 'bg-indigo-500'; // Default
+const createRecommendationIcon = (category: string) => {
+  const cfg = getCategoryConfig(category)
   
-  if (lowerLabel.includes('mensa') || lowerLabel.includes('food') || lowerLabel.includes('restaurant')) {
-    bgColor = 'bg-orange-500';
-  } else if (lowerLabel.includes('cafe') || lowerLabel.includes('coffee') || lowerLabel.includes('kaffee')) {
-    bgColor = 'bg-amber-600';
-  } else if (lowerLabel.includes('mobility') || lowerLabel.includes('research') || lowerLabel.includes('uni')) {
-    bgColor = 'bg-blue-600';
+  // Tailwind-bg-Klassen funktionieren nicht in DivIcon (kein Tailwind-Kontext),
+  // deshalb hex-Farben direkt per inline style
+  const bgColorMap: Record<string, { bg: string; border: string }> = {
+    "Arts and Entertainment":             { bg: "#f5f3ff", border: "#a78bfa" },
+    "Business and Professional Services": { bg: "#f8fafc", border: "#94a3b8" },
+    "Community and Government":           { bg: "#eff6ff", border: "#93c5fd" },
+    "Dining and Drinking":                { bg: "#fff7ed", border: "#fdba74" },
+    "Event":                              { bg: "#fefce8", border: "#fde047" },
+    "Health and Medicine":                { bg: "#fef2f2", border: "#fca5a5" },
+    "Landmarks and Outdoors":             { bg: "#f0fdf4", border: "#86efac" },
+    "Nightlife Spot":                     { bg: "#eef2ff", border: "#a5b4fc" },
+    "Retail":                             { bg: "#fdf2f8", border: "#f0abfc" },
+    "Sports and Recreation":              { bg: "#f0fdfa", border: "#5eead4" },
+    "Travel and Transportation":          { bg: "#f0f9ff", border: "#7dd3fc" },
   }
+
+  const level1 = (categoryLevel1Map as Record<string, string>)[category]
+  const colors = bgColorMap[level1] ?? { bg: "#f9fafb", border: "#d1d5db" }
 
   return L.divIcon({
     html: `
-      <div class="relative flex flex-col items-center gap-1 cursor-pointer group transform transition-transform hover:scale-105">
-        <div class="relative ${bgColor} w-7 h-7 rounded-full border-2 border-white shadow-md flex items-center justify-center text-white z-10">
-          <svg width="14" height="14" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round"><circle cx="12" cy="12" r="10"/><path d="m12 8-4 4h8z"/></svg>
-        </div>
-        <div class="bg-white/95 backdrop-blur-sm px-2 py-0.5 rounded-full shadow-sm border border-gray-100/50 whitespace-nowrap -mt-2 pt-2 pb-1">
-          <span class="text-[10px] font-bold text-gray-700 leading-none">${label}</span>
+      <div style="display:flex; flex-direction:column; align-items:center; gap:4px; cursor:pointer;">
+        <div style="
+          width: 36px; height: 36px;
+          background: ${colors.bg};
+          border: 2px solid ${colors.border};
+          border-radius: 50%;
+          box-shadow: 0 2px 8px rgba(0,0,0,0.12);
+          display: flex; align-items: center; justify-content: center;
+          font-size: 18px;
+          z-index: 10;
+        ">${cfg.icon}</div>
+        <div style="
+          background: white;
+          border: 1px solid rgba(0,0,0,0.08);
+          padding: 2px 8px;
+          border-radius: 999px;
+          box-shadow: 0 1px 4px rgba(0,0,0,0.08);
+          margin-top: -6px;
+          padding-top: 6px;
+          white-space: nowrap;
+        ">
+          <span style="font-size: 10px; font-weight: 700; color: #374151; line-height: 1;">${category}</span>
         </div>
       </div>
     `,
     className: 'custom-leaflet-icon',
-    iconSize: [120, 50],
-    iconAnchor: [60, 25],
-    popupAnchor: [0, -25]
-  });
-};
+    iconSize: [120, 58],
+    iconAnchor: [60, 29],
+    popupAnchor: [0, -29]
+  })
+}
+
+const LEVEL1_CONFIG = {
+  "Arts and Entertainment":             { icon: "🎭", bg: "bg-purple-50",  badge: "bg-purple-100 text-purple-800" },
+  "Business and Professional Services": { icon: "💼", bg: "bg-slate-50",   badge: "bg-slate-100 text-slate-700"  },
+  "Community and Government":           { icon: "🏛️", bg: "bg-blue-50",    badge: "bg-blue-100 text-blue-800"    },
+  "Dining and Drinking":                { icon: "🍽️", bg: "bg-orange-50",  badge: "bg-orange-100 text-orange-800"},
+  "Event":                              { icon: "🎟️", bg: "bg-yellow-50",  badge: "bg-yellow-100 text-yellow-800"},
+  "Health and Medicine":                { icon: "🏥", bg: "bg-red-50",     badge: "bg-red-100 text-red-700"      },
+  "Landmarks and Outdoors":             { icon: "🌿", bg: "bg-green-50",   badge: "bg-green-100 text-green-800"  },
+  "Nightlife Spot":                     { icon: "🌙", bg: "bg-indigo-50",  badge: "bg-indigo-100 text-indigo-800"},
+  "Retail":                             { icon: "🛍️", bg: "bg-pink-50",    badge: "bg-pink-100 text-pink-800"    },
+  "Sports and Recreation":              { icon: "⚽", bg: "bg-teal-50",    badge: "bg-teal-100 text-teal-800"    },
+  "Travel and Transportation":          { icon: "✈️", bg: "bg-sky-50",     badge: "bg-sky-100 text-sky-800"      },
+}
+
+const FALLBACK_CONFIG = { icon: "📍", bg: "bg-gray-50", badge: "bg-gray-100 text-gray-600" }
+
+// categoryLevel1Map muss TypeScript-kompatibel getyped werden:
+const level1Map = categoryLevel1Map as Record<string, string>
+
+function getCategoryConfig(categoryName: string) {
+  const level1 = level1Map[categoryName]
+  return LEVEL1_CONFIG[level1 as keyof typeof LEVEL1_CONFIG] ?? FALLBACK_CONFIG
+}
 
 export function MapView() {
   const navigate = useNavigate();
@@ -183,37 +233,43 @@ export function MapView() {
           </Marker>
 
           {/* Dynamische Foursquare Marker */}
-          {!loading && foursquarePlaces.map((place) => (
-            <Marker 
-              key={place.id} 
-              position={[place.lat, place.lng]} 
+          {!loading && foursquarePlaces.map((place) => {
+          const cfg = getCategoryConfig(place.category)  // ← hier definieren
+          return (
+            <Marker
+              key={place.id}
+              position={[place.lat, place.lng]}
               icon={createRecommendationIcon(place.category)}
             >
-              <Popup className="!p-0 border-none overflow-hidden rounded-xl shadow-lg m-0 w-[180px]">
+              <Popup className="!p-0 border-none overflow-hidden rounded-xl shadow-lg m-0 w-[200px]">
                 <div className="flex flex-col">
+                  <div className={`flex items-center justify-center h-16 text-4xl ${cfg.bg}`}>
+                    {cfg.icon}  {/* ← statt getIcon() */}
+                  </div>
                   <div className="p-3 bg-white">
-                    <div className="flex justify-between items-start mb-1 gap-1">
-                      <h3 className="font-bold text-gray-900 leading-tight text-sm break-words flex-1">{place.name}</h3>
+                    <h3 className="font-semibold text-gray-900 text-sm leading-tight mb-1">
+                      {place.name}
+                    </h3>
+                    <p className="text-[11px] text-gray-400 line-clamp-2 mb-2 leading-snug">
+                      {place.address}
+                    </p>
+                    <div className="flex flex-wrap items-center gap-1.5">
+                      <span className={`inline-flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-full ${cfg.badge}`}>
+                        {cfg.icon} {place.category}
+                      </span>
+                      {place.website && (
+                        <a href={place.website} target="_blank" rel="noopener noreferrer"
+                          className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 hover:bg-blue-100 transition-colors">
+                          Website ↗
+                        </a>
+                      )}
                     </div>
-                    <p className="text-[11px] text-gray-500 line-clamp-2">{place.address}</p>
-                    {place.website && (
-                      <a 
-                        href={place.website} 
-                        target="_blank" 
-                        rel="noopener noreferrer"
-                        className="inline-block mt-2 text-[9px] bg-blue-100 text-blue-600 font-semibold px-2 py-0.5 rounded-full hover:bg-blue-200 transition-colors"
-                      >
-                        Website besuchen ↗
-                      </a>
-                    )}
-                    <span className="inline-block mt-2 ml-2 text-[9px] bg-slate-100 text-slate-600 font-semibold px-2 py-0.5 rounded-full">
-                      Kategorie: {place.category}
-                    </span>
                   </div>
                 </div>
               </Popup>
             </Marker>
-          ))}
+          )
+        })}
 
         </MapContainer>
       </div>
