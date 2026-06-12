@@ -1,4 +1,5 @@
 import os
+import json
 import pandas as pd
 
 def read_data(filepath: str) -> pd.DataFrame:
@@ -167,6 +168,29 @@ def filter_tourist_categories(df: pd.DataFrame) -> pd.DataFrame:
     
     return filtered_df
 
+def save_category_mapping(df: pd.DataFrame, filepath: str) -> None:
+    """
+    Extracts the mapping of venue_category_id to level_1 categories
+    and saves it as a JSON file.
+    """
+    print(f"Extracting and saving category mapping to {filepath}...")
+    
+    # Verzeichnisse erstellen, falls sie nicht existieren
+    os.makedirs(os.path.dirname(filepath), exist_ok=True)
+    
+    # Nur die relevanten Spalten nehmen, leere Werte entfernen und Duplikate droppen
+    mapping_df = df[['venue_category_name', 'level_1']].dropna().drop_duplicates()
+    
+    # In ein Dictionary umwandeln
+    category_map = mapping_df.set_index('venue_category_name')['level_1'].to_dict()
+    
+    # Als JSON speichern
+    with open(filepath, 'w', encoding='utf-8') as f:
+        json.dump(category_map, f, indent=4, ensure_ascii=False)
+        
+    print(f"✅ Saved mapping with {len(category_map)} unique categories.")
+
+
 def pipeline(checkins_path: str, categories_path: str):
     """Main pipeline, controlling everything."""
     print("=== Starting Data Preprocessing ===")
@@ -184,8 +208,12 @@ def pipeline(checkins_path: str, categories_path: str):
     # 4. Filter non-tourist locations
     df_final = filter_tourist_categories(df_final)
 
-    # 5. Print statistics
+    # 5. Save Category Mapping
+    map_filepath = os.path.join("..", "data", "category_level1_map.json")
+    save_category_mapping(df_final, map_filepath)
+
+    # 6. Print statistics
     print_statistics(df_final)
     
-    # 6. Return 
+    # 7. Return 
     return df_final

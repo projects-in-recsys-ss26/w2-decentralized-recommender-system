@@ -1,13 +1,14 @@
 import React, { useState, useEffect } from "react";
 import { ChevronLeft, Shield, Eye, Map, Share2, Activity } from "lucide-react";
 import { useNavigate } from "react-router";
-import { Switch } from "./ui/Switch"; // Geht davon aus, dass dein Switch 'checked' und 'onCheckedChange' unterstützt
+import { Switch } from "./ui/Switch";
 
 export function PrivacySettings() {
   const navigate = useNavigate();
 
-  // State initialisieren: Standardmäßig an (true), es sei denn, es wurde explizit ausgeschaltet
+  // States
   const [shareLocation, setShareLocation] = useState(true);
+  const [showWarningModal, setShowWarningModal] = useState(false);
 
   useEffect(() => {
     // Beim Laden der Komponente den gespeicherten Wert abrufen
@@ -18,23 +19,31 @@ export function PrivacySettings() {
   }, []);
 
   const handleLocationToggle = (checked) => {
-    // Wenn der User es AUSSCHALTEN will
     if (!checked) {
-      const confirmDeactivation = window.confirm(
-        "Achtung: Wenn du deinen Standort nicht mit unserem Server teilst, muss dein Smartphone die Suche nach Orten selbst übernehmen. Das kann deinen mobilen Datenverbrauch erhöhen. Möchtest du das wirklich?"
-      );
-      
-      // Wenn der User im Alert auf "Abbrechen" drückt, brechen wir ab
-      if (!confirmDeactivation) return;
+      // Wenn der User es AUSSCHALTEN will -> Modal anzeigen, State noch nicht ändern
+      setShowWarningModal(true);
+    } else {
+      // Wenn der User es EINSCHALTEN will -> Direkt ändern
+      setShareLocation(true);
+      localStorage.setItem("shareLocation", "true");
     }
+  };
 
-    // State aktualisieren und speichern
-    setShareLocation(checked);
-    localStorage.setItem("shareLocation", checked);
+  // Wird aufgerufen, wenn im Modal "Turn off anyways" geklickt wird
+  const confirmTurnOff = () => {
+    setShareLocation(false);
+    localStorage.setItem("shareLocation", "false");
+    setShowWarningModal(false);
+  };
+
+  // Wird aufgerufen, wenn im Modal "Share location" geklickt wird
+  const cancelTurnOff = () => {
+    setShowWarningModal(false);
+    // Switch bleibt auf "true", da der State nicht geändert wurde
   };
 
   return (
-    <div className="w-full h-full bg-gray-50 flex flex-col">
+    <div className="w-full h-full bg-gray-50 flex flex-col relative">
       {/* Header */}
       <div className="pt-12 pb-4 px-6 bg-white flex items-center gap-4 shadow-sm z-10">
         <button 
@@ -108,10 +117,36 @@ export function PrivacySettings() {
 
             </div>
           </div>
-
         </div>
-
       </div>
+
+      {/* Google-Style Custom Alert Modal */}
+      {showWarningModal && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4 animate-in fade-in duration-200">
+          <div className="bg-white rounded-2xl p-6 max-w-sm w-full shadow-2xl">
+            <h3 className="text-[1.15rem] font-medium text-gray-900 mb-3">
+              Standortfreigabe beenden?
+            </h3>
+            <p className="text-sm text-gray-600 mb-6 leading-relaxed">
+              Achtung: Wenn du deinen Standort nicht mit unserem Server teilst, muss dein Smartphone die Suche nach Orten selbst übernehmen. Das kann deinen mobilen Datenverbrauch erhöhen.
+            </p>
+            <div className="flex justify-end gap-2">
+              <button
+                onClick={confirmTurnOff}
+                className="px-4 py-2.5 rounded-full text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 transition-colors"
+              >
+                Turn off anyways
+              </button>
+              <button
+                onClick={cancelTurnOff}
+                className="px-4 py-2.5 rounded-full text-sm font-medium text-white bg-[#1a73e8] hover:bg-blue-700 transition-colors"
+              >
+                Share location
+              </button>
+            </div>
+          </div>
+        </div>
+      )}
     </div>
   );
 }

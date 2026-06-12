@@ -1,4 +1,4 @@
-import React, { useEffect, useState } from "react";
+import React, { useEffect, useState, useMemo } from "react";
 import { Navigation, MapPin, Settings, Bell, Lock, Clock } from "lucide-react";
 import { useNavigate } from "react-router";
 import { MapContainer, TileLayer, Marker, Popup } from "react-leaflet";
@@ -39,8 +39,6 @@ const createUserIcon = () => {
 const createRecommendationIcon = (category: string) => {
   const cfg = getCategoryConfig(category)
   
-  // Tailwind-bg-Klassen funktionieren nicht in DivIcon (kein Tailwind-Kontext),
-  // deshalb hex-Farben direkt per inline style
   const bgColorMap: Record<string, { bg: string; border: string }> = {
     "Arts and Entertainment":             { bg: "#f5f3ff", border: "#a78bfa" },
     "Business and Professional Services": { bg: "#f8fafc", border: "#94a3b8" },
@@ -70,7 +68,7 @@ const createRecommendationIcon = (category: string) => {
           display: flex; align-items: center; justify-content: center;
           font-size: 18px;
           z-index: 10;
-        ">${cfg.icon}</div>
+        "><span class="material-symbols-outlined" style="font-size: 20px; color: ${colors.border};">${cfg.icon}</span></div>
         <div style="
           background: white;
           border: 1px solid rgba(0,0,0,0.08);
@@ -93,22 +91,21 @@ const createRecommendationIcon = (category: string) => {
 }
 
 const LEVEL1_CONFIG = {
-  "Arts and Entertainment":             { icon: "🎭", bg: "bg-purple-50",  badge: "bg-purple-100 text-purple-800" },
-  "Business and Professional Services": { icon: "💼", bg: "bg-slate-50",   badge: "bg-slate-100 text-slate-700"  },
-  "Community and Government":           { icon: "🏛️", bg: "bg-blue-50",    badge: "bg-blue-100 text-blue-800"    },
-  "Dining and Drinking":                { icon: "🍽️", bg: "bg-orange-50",  badge: "bg-orange-100 text-orange-800"},
-  "Event":                              { icon: "🎟️", bg: "bg-yellow-50",  badge: "bg-yellow-100 text-yellow-800"},
-  "Health and Medicine":                { icon: "🏥", bg: "bg-red-50",     badge: "bg-red-100 text-red-700"      },
-  "Landmarks and Outdoors":             { icon: "🌿", bg: "bg-green-50",   badge: "bg-green-100 text-green-800"  },
-  "Nightlife Spot":                     { icon: "🌙", bg: "bg-indigo-50",  badge: "bg-indigo-100 text-indigo-800"},
-  "Retail":                             { icon: "🛍️", bg: "bg-pink-50",    badge: "bg-pink-100 text-pink-800"    },
-  "Sports and Recreation":              { icon: "⚽", bg: "bg-teal-50",    badge: "bg-teal-100 text-teal-800"    },
-  "Travel and Transportation":          { icon: "✈️", bg: "bg-sky-50",     badge: "bg-sky-100 text-sky-800"      },
+  "Arts and Entertainment":             { icon: "theater_comedy", bg: "bg-purple-50",  badge: "bg-purple-100 text-purple-800" },
+  "Business and Professional Services": { icon: "business_center", bg: "bg-slate-50",   badge: "bg-slate-100 text-slate-700"  },
+  "Community and Government":           { icon: "account_balance", bg: "bg-blue-50",    badge: "bg-blue-100 text-blue-800"    },
+  "Dining and Drinking":                { icon: "restaurant", bg: "bg-orange-50",  badge: "bg-orange-100 text-orange-800"},
+  "Event":                              { icon: "event", bg: "bg-yellow-50",  badge: "bg-yellow-100 text-yellow-800"},
+  "Health and Medicine":                { icon: "local_hospital", bg: "bg-red-50",     badge: "bg-red-100 text-red-700"      },
+  "Landmarks and Outdoors":             { icon: "park", bg: "bg-green-50",   badge: "bg-green-100 text-green-800"  },
+  "Nightlife Spot":                     { icon: "nightlife", bg: "bg-indigo-50",  badge: "bg-indigo-100 text-indigo-800"},
+  "Retail":                             { icon: "shopping_bag", bg: "bg-pink-50",    badge: "bg-pink-100 text-pink-800"    },
+  "Sports and Recreation":              { icon: "sports_soccer", bg: "bg-teal-50",    badge: "bg-teal-100 text-teal-800"    },
+  "Travel and Transportation":          { icon: "flight", bg: "bg-sky-50",     badge: "bg-sky-100 text-sky-800"      },
 }
 
-const FALLBACK_CONFIG = { icon: "📍", bg: "bg-gray-50", badge: "bg-gray-100 text-gray-600" }
+const FALLBACK_CONFIG = { icon: "place", bg: "bg-gray-50", badge: "bg-gray-100 text-gray-600" }
 
-// categoryLevel1Map muss TypeScript-kompatibel getyped werden:
 const level1Map = categoryLevel1Map as Record<string, string>
 
 function getCategoryConfig(categoryName: string) {
@@ -119,10 +116,24 @@ function getCategoryConfig(categoryName: string) {
 export function MapView() {
   const navigate = useNavigate();
   const { triggerNotification } = useNotification();
-  const [currentHour, setCurrentHour] = useState(new Date().getHours());
+  
+  // Neuer State für die exakte Uhrzeit
+  const [currentTime, setCurrentTime] = useState(new Date());
+  
   const [recommendations, setRecommendations] = useState<string[]>([]);
   const [foursquarePlaces, setFoursquarePlaces] = useState<FoursquarePlace[]>([]);
   const [loading, setLoading] = useState(true);
+
+  // Berechnet die gerundete Stunde für die API (ab :30 aufrunden, sonst abrunden)
+  const roundedHour = useMemo(() => {
+    const minutes = currentTime.getMinutes();
+    let hour = currentTime.getHours();
+    
+    if (minutes >= 30) {
+      hour = (hour + 1) % 24; // Modulo 24, damit aus 23:30 -> 0 Uhr wird
+    }
+    return hour;
+  }, [currentTime]);
 
   // Garching Forschungszentrum Coordinates
   const userPos: [number, number] = [48.2650, 11.6702];
@@ -137,10 +148,20 @@ export function MapView() {
       document.head.appendChild(link);
     }
 
-    // Fetch recommendations from backend
+    // Inject Google Fonts if not already present
+    if (!document.getElementById("google-fonts")) {
+      const link = document.createElement("link");
+      link.id = "google-fonts";
+      link.rel = "stylesheet";
+      link.href = "https://fonts.googleapis.com/css2?family=Material+Symbols+Outlined:opsz,wght,FILL,GRAD@20..48,100..700,0..1,-50..200";
+      document.head.appendChild(link);
+    }
+
+    // Fetch recommendations from backend - nutzt jetzt roundedHour
     const fetchRecommendations = async () => {
       try {
-        const response = await fetch(`http://localhost:8000/api/example-user-recommendations?hour=${currentHour}`);
+        setLoading(true);
+        const response = await fetch(`http://localhost:8000/api/example-user-recommendations?hour=${roundedHour}`);
         const data = await response.json();
         console.log("📍 Backend Response:", data);
         console.log("🎯 Top 3 Kategorien:", data.recommendations["top_3_categories"]);
@@ -153,7 +174,7 @@ export function MapView() {
     };
 
     fetchRecommendations();
-  }, [currentHour]);
+  }, [roundedHour]); // Abhängigkeit geändert auf roundedHour
 
   // Sucht Orte auf Foursquare basierend auf den erhaltenen Kategorien
   useEffect(() => {
@@ -162,12 +183,10 @@ export function MapView() {
     const fetchFoursquarePlaces = async () => {
       const fetchedPlaces: FoursquarePlace[] = [];
 
-      // Für jede Kategorie aus dem localhost-Call senden wir eine Anfrage an den Backend-Proxy
       for (let index = 0; index < recommendations.length; index++) {
         const category = recommendations[index];
         
         try {
-          // Kleine Verzögerung zwischen Requests um Rate Limiting zu vermeiden (500ms)
           if (index > 0) {
             await new Promise(resolve => setTimeout(resolve, 500));
           }
@@ -209,6 +228,9 @@ export function MapView() {
     fetchFoursquarePlaces();
   }, [recommendations]);
 
+  // Hilfsfunktion zum Formatieren der Zeit für den Input
+  const timeString = `${currentTime.getHours().toString().padStart(2, '0')}:${currentTime.getMinutes().toString().padStart(2, '0')}`;
+
   return (
     <div className="relative w-full h-full bg-slate-50">
       
@@ -234,7 +256,7 @@ export function MapView() {
 
           {/* Dynamische Foursquare Marker */}
           {!loading && foursquarePlaces.map((place) => {
-          const cfg = getCategoryConfig(place.category)  // ← hier definieren
+          const cfg = getCategoryConfig(place.category)
           return (
             <Marker
               key={place.id}
@@ -243,8 +265,8 @@ export function MapView() {
             >
               <Popup className="!p-0 border-none overflow-hidden rounded-xl shadow-lg m-0 w-[200px]">
                 <div className="flex flex-col">
-                  <div className={`flex items-center justify-center h-16 text-4xl ${cfg.bg}`}>
-                    {cfg.icon}  {/* ← statt getIcon() */}
+                  <div className={`flex items-center justify-center h-16 ${cfg.bg}`}>
+                    <span className="material-symbols-outlined text-[48px] text-gray-500">{cfg.icon}</span>
                   </div>
                   <div className="p-3 bg-white">
                     <h3 className="font-semibold text-gray-900 text-sm leading-tight mb-1">
@@ -255,7 +277,7 @@ export function MapView() {
                     </p>
                     <div className="flex flex-wrap items-center gap-1.5">
                       <span className={`inline-flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-full ${cfg.badge}`}>
-                        {cfg.icon} {place.category}
+                        <span className="material-symbols-outlined text-[12px]">{cfg.icon}</span> {place.category}
                       </span>
                       {place.website && (
                         <a href={place.website} target="_blank" rel="noopener noreferrer"
@@ -286,10 +308,23 @@ export function MapView() {
           />
         </div>
         
-        {/* Current Hour Display */}
-        <div className="bg-white/90 backdrop-blur-md rounded-full px-4 py-3 shadow-[0_4px_20px_-4px_rgba(0,0,0,0.1)] flex items-center gap-2 pointer-events-auto border border-gray-100/50">
+        {/* Interactive Time Picker Display */}
+        <div className="bg-white/90 backdrop-blur-md rounded-full px-4 py-3 shadow-[0_4px_20px_-4px_rgba(0,0,0,0.1)] flex items-center gap-2 pointer-events-auto border border-gray-100/50 hover:bg-white transition-colors focus-within:ring-2 focus-within:ring-blue-500/50">
           <Clock className="w-5 h-5 text-blue-600" />
-          <span className="text-sm font-bold text-gray-900">{currentHour.toString().padStart(2, '0')}:00</span>
+          <input
+            type="time"
+            value={timeString}
+            onChange={(e) => {
+              if (!e.target.value) return;
+              const [hours, minutes] = e.target.value.split(':');
+              const newDate = new Date(currentTime);
+              newDate.setHours(parseInt(hours, 10));
+              newDate.setMinutes(parseInt(minutes, 10));
+              setCurrentTime(newDate);
+            }}
+            className="bg-transparent border-none outline-none text-sm font-bold text-gray-900 cursor-pointer w-[68px] [&::-webkit-calendar-picker-indicator]:cursor-pointer [&::-webkit-calendar-picker-indicator]:opacity-0 [&::-webkit-calendar-picker-indicator]:absolute [&::-webkit-calendar-picker-indicator]:w-full"
+            title="Set simulation time"
+          />
         </div>
       </div>
 

@@ -83,13 +83,6 @@ def main():
     trained_dict = model.popular_specific_by_hour_and_cluster 
     save_model_dictionary(trained_dict, MODEL_OUTPUT_PATH)
 
-    # 7. export categories fpr visu
-    import pandas as pd, json
-    df = pd.read_parquet('../data/foursquare_categories.parquet')
-    mapping = df.set_index('category_name')['level_1'].to_dict()
-    with open('../data/category_level1_map.json', 'w') as f:
-        json.dump(mapping, f)
-    
     print("\n🎉 TRAINING COMPLETE!")
     print("="*70)
     
