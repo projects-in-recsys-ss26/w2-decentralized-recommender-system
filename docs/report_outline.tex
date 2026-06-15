@@ -1,0 +1,134 @@
+\documentclass[11pt, a4paper]{article}
+
+\usepackage[utf8]{inputenc}
+\usepackage{geometry}
+\geometry{a4paper, margin=1in}
+\usepackage{hyperref}
+\usepackage{graphicx}
+\usepackage{cite}
+
+\title{Decentralized Point of Interest Prediction: A Privacy-Preserving Edge Architecture}
+\author{Dein Name \and Name deines Partners}
+\date{\today}
+
+\begin{document}
+
+\maketitle
+
+\begin{abstract}
+\begin{itemize}
+    \item Das Problem (Privacy bei Location-based Services)
+    \item Der Lösungsansatz (Decentralized/Edge-based Prediction, K-Means User Clustering)
+    \item Kurzer Ausblick auf die Ergebnisse
+\end{itemize}
+\end{abstract}
+
+\section{Introduction}
+\begin{itemize}
+    \item Motivation: Warum brauchen wir Recommender Systems für Points of Interest (POIs)?
+    \item Problem: Klassische Ansätze sammeln komplette Location Histories zentral (Privacy Issue).
+    \item Proposed Solution: Eine dezentrale Architektur, die auf dem Endgerät inferiert.
+    \item Paper Structure: Kurzer Überblick, was in den nächsten Sektionen passiert.
+\end{itemize}
+
+\section{Related Work}
+\subsection{Point of Interest Recommendation Systems}
+\begin{itemize}
+    \item Historischer Überblick über POI Recommender (Collaborative Filtering, Matrix Factorization).
+    \item State of the Art für Time-based und Location-based Empfehlungen.
+\end{itemize}
+
+\subsection{Federated Learning and Decentralized Approaches}
+\begin{itemize}
+    \item Überblick über Federated Learning.
+    \item Wie unterscheidet sich unser Ansatz (Centroids on device) von klassischem Federated Learning (wo Gewichte hin- und hergeschickt werden)?
+    \item Vorteile der Edge-Inferenz in Bezug auf Privacy.
+\end{itemize}
+
+\section{Methodology}
+\subsection{Dataset and Data Preprocessing}
+\begin{itemize}
+    \item Beschreibung des Foursquare Datensatzes (TSMC2014).
+    \item Data Cleaning: Herausfiltern von irrelevanten Orten (Airports, Train Stations, Home) für ein "Tourist Scenario".
+    \item Mapping der rohen Foursquare-Kategorien auf Level-1 Oberkategorien (z.B. "Dining and Drinking").
+\end{itemize}
+
+\subsection{Decentralized Architecture Overview}
+\begin{itemize}
+    \item High-Level Architektur (Big Picture).
+    \item Was passiert in der Cloud (Training von Baseline, Clustering auf Public Users)?
+    \item Was passiert on-device (Cluster-Matching, Inferenz)?
+\end{itemize}
+
+\subsection{User Partitioning via K-Means Clustering}
+\begin{itemize}
+    \item Konzept: Clustering von "Public Users" in der Cloud basierend auf ihrer Kategorie-Verteilung.
+    \item Anstatt Location History zu speichern, extrahieren wir nur die Interessen (Prozentuale Verteilung der Level-1 Kategorien).
+    \item K-Means trainiert k Centroids.
+    \item Device-Side: Das Endgerät lädt nur die k Centroids herunter, ordnet das lokale (private) Profil einem Cluster zu, ohne die eigenen Daten in die Cloud zu schicken.
+\end{itemize}
+
+\subsection{Time-Based Category Prediction}
+\begin{itemize}
+    \item Das Baseline-Modell: Eine einfache, schnelle Lookup-Tabelle ($\mathcal{O}(1)$).
+    \item Training erfolgt extrem datensparsam: Wir speichern keinen User-Context und keine Geodaten, sondern \textit{nur} die (Cluster, Hour) $\rightarrow$ Top-Kategorien Map.
+    \item Das Modell wird komplett auf dem Endgerät (Edge) deployed.
+    \item Das Endgerät nutzt die eigene lokale Uhrzeit und den eigenen (lokal berechneten) Cluster, um die nächste "Kategorie" vorherzusagen.
+\end{itemize}
+
+\subsection{Advanced Prediction Model (Dedicated Approach)}
+\begin{itemize}
+    \item Hier kommt der Part deines Partners hin!
+    \item Komplexeres Modell (z.B. Deep Learning, Graph Neural Networks, etc.).
+    \item Wie integriert sich dieses in die dezentrale Architektur?
+\end{itemize}
+
+\section{System Implementation and Live Retrieval}
+\begin{itemize}
+    \item Sobald das Modell on-device z.B. "American Restaurant" vorhergesagt hat, muss ein echter Ort her.
+    \item Implementation: Edge-Request an die Foursquare Places API (Proxy-Backend).
+    \item Query-Strategien (Popularity vs. Distance vs. Relevance).
+\end{itemize}
+
+\section{Limitations}
+\subsection{Dataset Constraints}
+\begin{itemize}
+    \item Geografischer Bias: Unser Modell ist aktuell stark auf die Charakteristiken von Großstädten (New York City und Tokyo) begrenzt.
+    \item Dichte: NYC hat extrem viele Foursquare-Daten, in ländlichen Regionen würde die Time-based Prediction anders aussehen.
+\end{itemize}
+
+\subsection{Privacy Limitations of the API Retrieval}
+\begin{itemize}
+    \item Der Trade-Off: Obwohl wir die Vorhersage (welche Kategorie will der User?) lokal auf der Edge machen und keine Location History zentral speichern, müssen wir für den \textit{Retrieval} (Welche Orte gibt es hier?) einen API-Call machen.
+    \item Das erfordert das Senden der aktuellen Koordinaten an Foursquare. 
+    \item Möglicher Ausblick: Lokale Offline-Kartenbanken (OSM) auf dem Handy, um auch den Retrieval komplett offline und 100\% private zu machen.
+\end{itemize}
+
+\section{Evaluation and Results}
+\begin{itemize}
+    \item Evaluierungsmetriken (Hit Rate @ K, Accuracy @ 1).
+    \item Splitting-Strategie (Chronologischer Split, um Data Leakage in die Zukunft zu verhindern).
+    \item Vergleich: Globales Time-based Model vs. Unser Cluster-spezifisches Time-based Model.
+    \item (Hier fließen dann auch die Ergebnisse vom Modell deines Partners ein).
+\end{itemize}
+
+\section{Conclusion and Future Work}
+\begin{itemize}
+    \item Was haben wir erreicht? (Ein funktionierendes, Privacy-freundliches Edge-Recommender System).
+    \item Fazit: Ist Dezentralisierung für Location-based Services machbar?
+    \item Ausblick auf zukünftige Forschung (z.B. Integration von Offline-POI-Datenbanken).
+\end{itemize}
+
+\bibliographystyle{ieeetr}
+\begin{thebibliography}{99}
+
+\bibitem{foursquare_dataset}
+Dingqi Yang et al., 
+\textit{Modeling Spatial-Temporal Contexts for POI Recommendation},
+IEEE Transactions on Knowledge and Data Engineering, 2014.
+
+% Füge hier deine weiteren Paper zu FL und POI Recommendation ein
+
+\end{thebibliography}
+
+\end{document}

@@ -1,5 +1,9 @@
 import pandas as pd
 import numpy as np
+import math
+import json
+import os
+import requests
 
 
 def split_data_chronologically(df: pd.DataFrame, train_ratio=0.6, val_ratio=0.2):
@@ -165,8 +169,191 @@ def evaluate_recommender(model, test_df: pd.DataFrame, user_features_df: pd.Data
     
     print("="*70)
     
+    # Metriken in ein sauberes Dictionary packen
+    metrics = {
+        "global_acc_1_spec": acc_1_spec_global,
+        "global_hit_k_spec": hit_k_spec_global,
+        "global_acc_1_lvl1": acc_1_lvl1_global,
+        "global_hit_k_lvl1": hit_k_lvl1_global,
+    }
+    
     if use_clusters and cluster_total > 0:
-        return (acc_1_spec_global, hit_k_spec_global, acc_1_lvl1_global, hit_k_lvl1_global,
-                acc_1_spec_cluster, hit_k_spec_cluster, acc_1_lvl1_cluster, hit_k_lvl1_cluster)
+        metrics.update({ "cluster_acc_1_spec": acc_1_spec_cluster, "cluster_hit_k_spec": hit_k_spec_cluster, "cluster_acc_1_lvl1": acc_1_lvl1_cluster, "cluster_hit_k_lvl1": hit_k_lvl1_cluster })
+        
+    return metrics
+
+def haversine_distance(lat1, lon1, lat2, lon2):
+    """Berechnet die Distanz zwischen zwei Koordinaten in Metern."""
+    R = 6371000  # Erdradius in Metern
+    phi1, phi2 = math.radians(lat1), math.radians(lat2)
+    delta_phi = math.radians(lat2 - lat1)
+    delta_lambda = math.radians(lon2 - lon1)
+    a = math.sin(delta_phi/2)**2 + math.cos(phi1)*math.cos(phi2)*math.sin(delta_lambda/2)**2
+    return R * 2 * math.atan2(math.sqrt(a), math.sqrt(1 - a))
+
+def evaluate_poi_retrieval(trained_dict, test_df, user_features_df, api_key, max_users=200, distance_threshold_meters=100, offline_mode=False):
+    """
+    Führt eine "Leave-One-Out" Foursquare Evaluation durch.
+    """
+    print(f"\n--- Starte POI Retrieval Evaluation (Max Users: {max_users or 'ALL'}) ---")
+    
+    if not api_key:
+        print("⚠️ Kein Foursquare API Key gefunden. Überspringe POI Evaluation.")
+        return
+
+    # 1. Test-Set: Nur den absolut letzten Check-in pro User nehmen ("Leave-One-Out")
+    if 'utc_time' in test_df.columns:
+        test_samples = test_df.sort_values('utc_time').groupby('user_id').tail(1)
     else:
-        return acc_1_spec_global, hit_k_spec_global, acc_1_lvl1_global, hit_k_lvl1_global
+        test_samples = test_df.groupby('user_id').tail(1)
+        
+    # Falls wir das API Limit schonen wollen, begrenzen wir die Nutzeranzahl
+    if max_users and max_users < len(test_samples):
+        test_samples = test_samples.sample(n=max_users, random_state=42)
+
+    # 2. Lokalen Cache laden (verhindert doppelte API Aufrufe und spart Foursquare Kontingent)
+    cache_file = "foursquare_api_cache.json"
+    api_cache = {}
+    if os.path.exists(cache_file):
+        with open(cache_file, 'r') as f:
+            api_cache = json.load(f)
+
+    headers = {
+        "Accept": "application/json",
+        "Authorization": f"Bearer {api_key}",
+        "X-Places-Api-Version": "2025-06-17",
+    }
+
+    # 3. Metriken vorbereiten
+    cat_hit_3 = 0
+    poi_hit_3 = 0  # Hatten wir einen Treffer im Top 1 Place der 3 Kategorien? (Insgesamt 3 Places)
+    poi_hit_9 = 0  # Hatten wir einen Treffer in den Top 3 Places der 3 Kategorien? (Insgesamt 9 Places)
+    
+    total = len(test_samples)
+    total_evaluated = 0  # Zählt, wie viele User wir VOR einem eventuellen API-Limit geschafft haben
+    user_clusters = dict(zip(user_features_df['user_id'], user_features_df['cluster']))
+
+    print("Frage Foursquare API ab (Nutze Caching, wo möglich)...")
+    
+    api_limit_reached = False
+    for idx, (_, row) in enumerate(test_samples.iterrows()):
+        if idx % 10 == 0 and idx > 0:
+            print(f"  > Evaluiere User {idx}/{total}...")
+            # Zwischenspeichern des Caches, falls das Skript abgebrochen wird
+            with open(cache_file, 'w') as f:
+                json.dump(api_cache, f)
+            
+        user_id = row['user_id']
+        actual_cat = row['venue_category_name']  # Spezifische Kategorie für das Modell
+        actual_lat = float(row['latitude'])
+        actual_lng = float(row['longitude'])
+        
+        # Lokale Stunde berechnen
+        if 'utc_time' in row and pd.notnull(row['utc_time']):
+            try:
+                utc_time = pd.to_datetime(row['utc_time'])
+                if utc_time.tzinfo is not None:
+                    utc_time = utc_time.tz_convert(None)
+                tz_offset = int(row.get('timezone_offset', 0))
+                local_time = utc_time + pd.Timedelta(minutes=tz_offset)
+                hour = local_time.hour
+            except:
+                hour = 12
+        else:
+            hour = 12
+            
+        cluster = user_clusters.get(user_id, None)
+        
+        # Top 3 Kategorien aus dem trainierten Dictionary holen
+        cluster_data = trained_dict.get(cluster, {})
+        pred_cats = cluster_data.get(hour, []) if isinstance(cluster_data, dict) else []
+        
+        # Metrik 1: Kategorie Hit
+        if actual_cat in pred_cats:
+            cat_hit_3 += 1
+            
+        # Foursquare Places abfragen
+        places_top1 = []
+        places_top3 = []
+        
+        for cat in pred_cats:
+            if api_limit_reached:
+                break
+                
+            # Limit = 3, damit wir sowohl die 3er- als auch die 9er-Metrik testen können!
+            cache_key = f"{actual_lat}_{actual_lng}_{cat}_3_POPULARITY"
+            
+            if cache_key in api_cache:
+                results = api_cache[cache_key]
+            else:
+                if offline_mode:
+                    # Im Offline-Modus stoppen wir die Evaluierung für neue POIs sofort
+                    api_limit_reached = True
+                    results = []
+                else:
+                    params = {
+                        "query": cat,
+                        "ll": f"{actual_lat},{actual_lng}",
+                        "radius": 1500,
+                        "limit": 3,
+                        "sort": "POPULARITY",
+                        "fields": "fsq_place_id,name,latitude,longitude"
+                    }
+                    try:
+                        resp = requests.get("https://places-api.foursquare.com/places/search", headers=headers, params=params)
+                        if resp.status_code == 200:
+                            results = resp.json().get('results', [])
+                            api_cache[cache_key] = results
+                        elif resp.status_code in [403, 429]:
+                            print(f"\n❌ FOURSQUARE API LIMIT EXCEEDED (Status {resp.status_code})! Stoppe Live-Anfragen.")
+                            api_limit_reached = True
+                            results = []
+                        else:
+                            results = []
+                    except Exception as e:
+                        results = []
+                    
+            if len(results) > 0:
+                places_top1.append(results[0])  # Nur das beste Restaurant dieser Kategorie
+                places_top3.extend(results)     # Alle 3 Top-Restaurants dieser Kategorie
+
+        if api_limit_reached and len(places_top1) == 0:
+            break  # Bricht die User-Schleife ab, da wir ohne API keine POI-Evaluation mehr machen können
+
+        # Metrik 2 & 3: Place Hit über Haversine Distanz (innerhalb von 100m)
+        def check_match(places_list):
+            for p in places_list:
+                if p.get('latitude') and p.get('longitude'):
+                    dist = haversine_distance(actual_lat, actual_lng, p['latitude'], p['longitude'])
+                    if dist <= distance_threshold_meters:
+                        return True
+            return False
+            
+        if check_match(places_top1): poi_hit_3 += 1
+        if check_match(places_top3): poi_hit_9 += 1
+            
+        total_evaluated += 1
+
+    # Abschließendes Speichern des Caches (verhindert Datenverlust)
+    with open(cache_file, 'w') as f:
+        json.dump(api_cache, f)
+
+    print("\n" + "="*50)
+    print(f"📊 FOURSQUARE POI RETRIEVAL RESULTS (N={total_evaluated} evaluiert von {total})")
+    print("="*50)
+    
+    # Metriken in ein sauberes Dictionary packen
+    cat_hit_rate = (cat_hit_3/total_evaluated*100) if total_evaluated > 0 else 0
+    poi_hit_3_rate = (poi_hit_3/total_evaluated*100) if total_evaluated > 0 else 0
+    poi_hit_9_rate = (poi_hit_9/total_evaluated*100) if total_evaluated > 0 else 0
+    
+    print(f"🎯 Specific Category Hit Rate @ 3:      {cat_hit_rate:.1f} %")
+    print(f"📍 POI Hit Rate @ 3 (1 Place pro Cat):  {poi_hit_3_rate:.1f} %")
+    print(f"📍 POI Hit Rate @ 9 (3 Places pro Cat): {poi_hit_9_rate:.1f} %")
+    print("="*50 + "\n")
+    
+    return {
+        "fsq_cat_hit_rate_at_3": cat_hit_rate,
+        "fsq_poi_hit_rate_at_3": poi_hit_3_rate,
+        "fsq_poi_hit_rate_at_9": poi_hit_9_rate
+    }

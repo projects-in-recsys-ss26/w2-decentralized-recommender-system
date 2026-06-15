@@ -1,0 +1,13 @@
+{
+    "global_acc_1_spec": 16.55352669982212,
+    "global_hit_k_spec": 28.75086216284895,
+    "global_acc_1_lvl1": 49.94010237049407,
+    "global_hit_k_lvl1": 84.65894652775256,
+    "cluster_acc_1_spec": 20.978690964533342,
+    "cluster_hit_k_spec": 32.75855810070062,
+    "cluster_acc_1_lvl1": 57.7776164373616,
+    "cluster_hit_k_lvl1": 89.83555378081097,
+    "fsq_cat_hit_rate_at_3": 30.0,
+    "fsq_poi_hit_rate_at_3": 0.0,
+    "fsq_poi_hit_rate_at_9": 15.0
+}

@@ -1,5 +1,10 @@
+import os
+import json
+from dotenv import load_dotenv
 import pickle  # Neu importieren für das Speichern
-from src.evaluator import evaluate_recommender, split_data_chronologically
+import pandas as pd
+import numpy as np
+from src.evaluator import evaluate_recommender, split_data_chronologically, evaluate_poi_retrieval
 from src.timebased_recommender import TimeBasedBaselineRecommender
 from src.user_clustering import UserPartitioningRecommender
 from src.preprocess_data import pipeline
@@ -18,6 +23,62 @@ def save_model_dictionary(model_dict, filepath):
         pickle.dump(model_dict, f)
     print(f"=== Modell erfolgreich unter '{filepath}' gespeichert! 💾 ===")
 
+def run_scaling_experiment(checkin_df, api_key, offline_mode=True):
+    """
+    Trainiert und evaluiert das Modell iterativ mit steigender Anzahl an Usern,
+    um den Lernfortschritt des Recommenders (Scaling Laws) zu messen.
+    """
+    print("\n" + "="*70)
+    print("🚀 STARTING SCALING EXPERIMENT (Increasing User Counts)")
+    print("="*70)
+    
+    os.makedirs("statistics", exist_ok=True)
+    
+    all_users = checkin_df['user_id'].unique()
+    user_counts = [20, 50, 100, 150, 200, 300, 400, 600, len(all_users)]
+    
+    results = []
+    
+    for count in user_counts:
+        # Dynamisches k: 10% der Nutzerzahl, aber mindestens 2 Cluster
+        dynamic_k = max(2, count // 10)
+        
+        print(f"\n\n--- Evaluierung mit {count} Usern (k={dynamic_k}) ---")
+        # 1. Sample users (fixierter random state für Reproduzierbarkeit)
+        np.random.seed(42)
+        sampled_users = np.random.choice(all_users, size=min(count, len(all_users)), replace=False)
+        df_subset = checkin_df[checkin_df['user_id'].isin(sampled_users)].copy()
+        
+        # 2. Pipeline für dieses Subset durchlaufen
+        user_clustering_model = UserPartitioningRecommender(k=dynamic_k, top_categories=9)
+        user_features_subset = user_clustering_model.fit(df_subset)
+        
+        train_sub, val_sub, test_sub = split_data_chronologically(df_subset, train_ratio=0.6, val_ratio=0.2)
+        
+        model_sub = TimeBasedBaselineRecommender(top_k=3, use_user_clusters=True)
+        model_sub.fit(train_sub, user_cluster_df=user_features_subset)
+        
+        rec_metrics = evaluate_recommender(model_sub, test_sub, user_features_df=user_features_subset)
+        
+        # 3. Foursquare Evaluation (max_users=None, da das Cache API Calls verhindert!)
+        poi_metrics = evaluate_poi_retrieval(model_sub.popular_specific_by_hour_and_cluster, test_sub, user_features_subset, api_key, max_users=None, distance_threshold_meters=100, offline_mode=offline_mode)
+        
+        # 4. Speichern der Subset-Ergebnisse
+        combined_metrics = {
+            "num_users": count,
+            "k_clusters": dynamic_k,
+            "total_checkins": len(df_subset),
+            **rec_metrics,
+            **(poi_metrics if poi_metrics else {})
+        }
+        results.append(combined_metrics)
+        
+        pd.DataFrame(results).to_csv("statistics/scaling_results.csv", index=False)
+        with open("statistics/scaling_results.json", "w") as f:
+            json.dump(results, f, indent=4)
+            
+    print("\n✅ Scaling Experiment abgeschlossen! Ergebnisse in 'statistics/' gespeichert.")
+
 def main():
     # -- Preprocessing --------------------------------------------------------
     print("Start Preprocessing Pipeline...")    
@@ -33,7 +94,7 @@ def main():
     test_user_id = checkin_df['user_id'].iloc[0]
     plot_user_trajectory(df=checkin_df, user_id=test_user_id, output_html="nyc_user_map.html")
 
-    # -- User Clustering (K-Means) - ZUERST trainieren ------------------------------------------
+    # -- User Clustering (K-Means)  ------------------------------------------
     print("\n" + "="*70)
     print("START USER CLUSTERING MODEL TRAINING")
     print("="*70 + "\n")
@@ -58,7 +119,7 @@ def main():
     centroids_df = user_clustering_model.get_cluster_centroids()
     print(centroids_df.to_string())
 
-    # -- Time-Based Recommendations mit User-Clustering ------------------------------------------
+    # -- Time-Based Recommendations mit User-Clustering -----------------------
     print("\n" + "="*70)
     print("START TIME-BASED RECOMMENDER MODEL TRAINING")
     print("="*70 + "\n")
@@ -73,7 +134,7 @@ def main():
     model.fit(train_df, user_cluster_df=user_features_df)
 
     # 4. Modell auf TEST-Daten evaluieren (mit Cluster-basiertem Evaluation)
-    evaluate_recommender(model, test_df, user_features_df=user_features_df)
+    rec_metrics = evaluate_recommender(model, test_df, user_features_df=user_features_df)
 
     # 5. Stündliche Empfehlungen ausgeben (Global + Pro Cluster)
     print("\n" + "="*70)
@@ -88,6 +149,32 @@ def main():
     trained_dict = model.popular_specific_by_hour_and_cluster 
     save_model_dictionary(trained_dict, MODEL_OUTPUT_PATH)
 
+    # -- Foursquare API Leave-One-Out Evaluation ------------------------------
+    print("\n" + "="*70)
+    print("START FOURSQUARE POI RETRIEVAL EVALUATION")
+    print("="*70 + "\n")
+    load_dotenv()
+    api_key = os.getenv("FOURSQUARE_API_KEY")
+    
+    poi_metrics = evaluate_poi_retrieval(
+        trained_dict=trained_dict, 
+        test_df=test_df, 
+        user_features_df=user_features_df, 
+        api_key=api_key, 
+        max_users=20,  # Begrenzt auf zufällige 20 User zum Schonen deines API Limits
+        offline_mode=True # Geht sicher, dass auch der Einzel-Test keine API-Credits mehr frisst!
+    )
+    
+    # Standard-Ergebnisse in den Statistics-Ordner schreiben
+    os.makedirs("statistics", exist_ok=True)
+    standard_results = {**rec_metrics, **(poi_metrics if poi_metrics else {})}
+    with open("statistics/standard_evaluation.json", "w") as f:
+        json.dump(standard_results, f, indent=4)
+    print(f"\n✅ Standard-Evaluierung unter 'statistics/standard_evaluation.json' gespeichert.")
+
+    # -- SCALING EXPERIMENT ---------------------------------------------------
+    run_scaling_experiment(checkin_df, api_key, offline_mode=True)
+    
     print("\n🎉 TRAINING COMPLETE!")
     print("="*70)
     
