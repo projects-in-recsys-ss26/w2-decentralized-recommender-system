@@ -9,6 +9,7 @@ CHECKINS_FILE = "C:\\Users\\Mattes\\Studium\\Semester 10\\Projekt\\masterproject
 CATEGORIES_FILE = "C:\\Users\\Mattes\\Studium\\Semester 10\\Projekt\\masterproject-decentralized-recommender-systems\\data\\foursquare_categories.parquet"
 MODEL_OUTPUT_PATH = "trained_model.pkl"  # Pfad für die Modelldatei
 USER_FEATURES_PATH = "C:\\Users\\Mattes\\Studium\\Semester 10\\Projekt\\masterproject-decentralized-recommender-systems\\data\\user_partitioning.parquet"  # User-Features Parquet
+PREPROCESSED_CHECKINS_FILE = "C:\\Users\\Mattes\\Studium\\Semester 10\\Projekt\\masterproject-decentralized-recommender-systems\\data\\preprocessed_checkins_nyc.parquet"
 KMEANS_MODEL_PATH = "user_clustering_model.pkl"  # K-Means Modell
 
 def save_model_dictionary(model_dict, filepath):
@@ -22,6 +23,10 @@ def main():
     print("Start Preprocessing Pipeline...")    
     checkin_df = pipeline(CHECKINS_FILE, CATEGORIES_FILE)
     print("=== Preprocessing done successfully! 🎉 ===\n")
+    
+    # Gefilterte Check-ins speichern, damit die API beim Validieren/Testen nicht über herausgefilterte Orte stolpert
+    print(f"Speichere bereinigte Check-ins unter '{PREPROCESSED_CHECKINS_FILE}'...")
+    checkin_df.to_parquet(PREPROCESSED_CHECKINS_FILE, index=False)
     
     # -- Visualisierung -------------------------------------------------------
     print("Start visualisation...")

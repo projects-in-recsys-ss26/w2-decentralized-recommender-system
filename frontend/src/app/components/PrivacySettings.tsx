@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from "react";
 import { ChevronLeft, Shield, Eye, Map, Share2, Activity } from "lucide-react";
 import { useNavigate } from "react-router";
-import { Switch } from "./ui/Switch";
+import { Switch } from "./ui/switch";
 
 export function PrivacySettings() {
   const navigate = useNavigate();
@@ -18,7 +18,7 @@ export function PrivacySettings() {
     }
   }, []);
 
-  const handleLocationToggle = (checked) => {
+  const handleLocationToggle = (checked: boolean) => {
     if (!checked) {
       // Wenn der User es AUSSCHALTEN will -> Modal anzeigen, State noch nicht ändern
       setShowWarningModal(true);
@@ -108,8 +108,8 @@ export function PrivacySettings() {
                 <div className="flex items-start gap-3">
                   <Activity className="w-5 h-5 text-gray-400 mt-0.5" />
                   <div>
-                    <p className="font-medium text-gray-900">Location History</p>
-                    <p className="text-xs text-gray-500 mt-0.5">Keep and share a record of places visited</p>
+                    <p className="font-medium text-gray-900">Share Exact Check-ins</p>
+                    <p className="text-xs text-gray-500 mt-0.5">Allow saving your precise check-in locations instead of just the venue categories.</p>
                   </div>
                 </div>
                 <Switch defaultChecked={false} />
@@ -125,10 +125,10 @@ export function PrivacySettings() {
         <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4 animate-in fade-in duration-200">
           <div className="bg-white rounded-2xl p-6 max-w-sm w-full shadow-2xl">
             <h3 className="text-[1.15rem] font-medium text-gray-900 mb-3">
-              Standortfreigabe beenden?
+              Turn off location sharing?
             </h3>
             <p className="text-sm text-gray-600 mb-6 leading-relaxed">
-              Achtung: Wenn du deinen Standort nicht mit unserem Server teilst, muss dein Smartphone die Suche nach Orten selbst übernehmen. Das kann deinen mobilen Datenverbrauch erhöhen.
+              Attention: Without sharing your location with our server, your device must perform location searches itself, potentially increasing your mobile data usage.
             </p>
             <div className="flex justify-end gap-2">
               <button

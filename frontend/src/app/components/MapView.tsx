@@ -1,7 +1,7 @@
-import React, { useEffect, useState, useMemo } from "react";
-import { Navigation, MapPin, Settings, Bell, Lock, Clock } from "lucide-react";
+import React, { useEffect, useState, useMemo, useRef } from "react";
+import { Navigation, MapPin, Settings, Bell, Lock, Clock, SkipForward } from "lucide-react";
 import { useNavigate } from "react-router";
-import { MapContainer, TileLayer, Marker, Popup } from "react-leaflet";
+import { MapContainer, TileLayer, Marker, Popup, useMap } from "react-leaflet";
 import L from "leaflet";
 import { useNotification } from "./NotificationContext";
 import categoryLevel1Map from '../../../../data/category_level1_map.json'
@@ -12,7 +12,7 @@ interface FoursquarePlace {
   name: string;
   lat: number;
   lng: number;
-  category: string;
+  categories: string[];
   address?: string;
   website?: string;
 }
@@ -21,18 +21,37 @@ interface FoursquarePlace {
 const createUserIcon = () => {
   return L.divIcon({
     html: `
-      <div class="relative w-8 h-8 flex items-center justify-center">
-        <div class="absolute inset-0 bg-blue-500/30 rounded-full animate-ping"></div>
-        <div class="absolute inset-1 bg-blue-500/20 rounded-full"></div>
-        <div class="relative bg-blue-600 w-8 h-8 rounded-full border-2 border-white shadow-xl flex items-center justify-center">
-          <svg width="16" height="16" viewBox="0 0 24 24" fill="none" stroke="white" stroke-width="2.5" stroke-linecap="round" stroke-linejoin="round" class="-rotate-45 ml-[-2px] mt-[2px]"><polygon points="3 11 22 2 13 21 11 13 3 11"></polygon></svg>
+      <div class="relative w-10 h-10 flex items-center justify-center">
+        <div class="absolute inset-0 rounded-full animate-ping" style="background-color: rgba(59, 130, 246, 0.4);"></div>
+        <div class="absolute inset-1 rounded-full" style="background-color: rgba(59, 130, 246, 0.2);"></div>
+        <div class="relative w-8 h-8 rounded-full border-2 border-white shadow-xl flex items-center justify-center" style="background-color: #2563eb;">
+          <span class="material-symbols-outlined text-white" style="font-size: 18px;">person</span>
         </div>
       </div>
     `,
     className: 'custom-leaflet-icon',
-    iconSize: [32, 32],
-    iconAnchor: [16, 16],
-    popupAnchor: [0, -16]
+    iconSize: [40, 40],
+    iconAnchor: [20, 20],
+    popupAnchor: [0, -20]
+  });
+};
+
+// Create custom icons using DivIcon for Tailwind styling compatibility
+const createActualCheckinIcon = () => {
+  return L.divIcon({
+    html: `
+      <div class="relative w-10 h-10 flex items-center justify-center">
+        <div class="absolute inset-0 bg-sky-400/40 rounded-full animate-ping"></div>
+        <div class="absolute inset-1 bg-sky-400/20 rounded-full"></div>
+        <div class="relative bg-sky-500 w-8 h-8 rounded-full border-2 border-white shadow-xl flex items-center justify-center">
+          <span class="material-symbols-outlined text-white" style="font-size: 18px;">my_location</span>
+        </div>
+      </div>
+    `,
+    className: 'custom-leaflet-icon',
+    iconSize: [40, 40],
+    iconAnchor: [20, 20],
+    popupAnchor: [0, -20]
   });
 };
 
@@ -113,13 +132,43 @@ function getCategoryConfig(categoryName: string) {
   return LEVEL1_CONFIG[level1 as keyof typeof LEVEL1_CONFIG] ?? FALLBACK_CONFIG
 }
 
+// Hilfskomponente, um die Karte so zu zentrieren, dass alle Marker sichtbar sind
+function MapBoundsUpdater({ positions }: { positions: [number, number][] }) {
+  const map = useMap();
+  useEffect(() => {
+    if (!positions || positions.length === 0) return;
+    
+    if (positions.length === 1) {
+      map.setView(positions[0], 14);
+    } else {
+      const bounds = L.latLngBounds(positions);
+      map.fitBounds(bounds, {
+        paddingTopLeft: [50, 80],      // Platz für Searchbar & Timepicker oben
+        paddingBottomRight: [50, 160], // Platz für Navigation unten
+        maxZoom: 16,
+        animate: true
+      });
+    }
+  }, [positions, map]);
+  return null;
+}
+
 export function MapView() {
   const navigate = useNavigate();
   const { triggerNotification } = useNotification();
   
+  // Neuer State für den User-Index, um durch die User zu navigieren
+  const [userIndex, setUserIndex] = useState<number>(0);
+
   // Neuer State für die exakte Uhrzeit
   const [currentTime, setCurrentTime] = useState(new Date());
   
+  // State für die simulierte User Location (Default: NYC Zentrum)
+  const [userPos, setUserPos] = useState<[number, number]>([40.7128, -74.0060]);
+  const [actualCheckinPos, setActualCheckinPos] = useState<[number, number] | null>(null);
+  const [actualCheckinName, setActualCheckinName] = useState<string>("Unknown Place");
+  const timeSyncedUserIndexRef = useRef<number | null>(null);
+
   const [recommendations, setRecommendations] = useState<string[]>([]);
   const [foursquarePlaces, setFoursquarePlaces] = useState<FoursquarePlace[]>([]);
   const [loading, setLoading] = useState(true);
@@ -135,8 +184,17 @@ export function MapView() {
     return hour;
   }, [currentTime]);
 
-  // Garching Forschungszentrum Coordinates
-  const userPos: [number, number] = [48.2650, 11.6702];
+  // Berechne alle Marker-Positionen, um die Karte darauf zu zentrieren
+  const mapPositions = useMemo(() => {
+    const positions: [number, number][] = [userPos];
+    if (actualCheckinPos) {
+      positions.push(actualCheckinPos);
+    }
+    foursquarePlaces.forEach((place) => {
+      positions.push([place.lat, place.lng]);
+    });
+    return positions;
+  }, [userPos, actualCheckinPos, foursquarePlaces]);
 
   useEffect(() => {
     // Inject Leaflet CSS if not already present
@@ -161,10 +219,29 @@ export function MapView() {
     const fetchRecommendations = async () => {
       try {
         setLoading(true);
-        const response = await fetch(`http://localhost:8000/api/example-user-recommendations?hour=${roundedHour}`);
+        setFoursquarePlaces([]); // Alte Foursquare-Orte löschen, bevor neue geladen werden!
+        const response = await fetch(`http://localhost:8000/api/example-user-recommendations?user_index=${userIndex}&hour=${roundedHour}`);
+        if (!response.ok) {
+          throw new Error(`HTTP error! status: ${response.status}`);
+        }
         const data = await response.json();
         console.log("📍 Backend Response:", data);
         console.log("🎯 Top 3 Kategorien:", data.recommendations["top_3_categories"]);
+        
+        if (data.location) {
+          const lat = data.location.lat;
+          const lng = data.location.lng;
+          setActualCheckinPos([lat, lng]);
+          setUserPos([lat - 0.0035, lng - 0.0035]); // Offset für die User-Position
+          setActualCheckinName(data.location.name || "Unknown Place");
+          
+          // Zeit auf den echten Check-in synchronisieren (nur einmalig pro geladenem User)
+          if (data.location.local_time && timeSyncedUserIndexRef.current !== userIndex) {
+            setCurrentTime(new Date(data.location.local_time));
+            timeSyncedUserIndexRef.current = userIndex;
+          }
+        }
+        
         setRecommendations(data.recommendations["top_3_categories"] || []);
       } catch (error) {
         console.error("❌ Fehler beim Abrufen der Empfehlungen:", error);
@@ -174,16 +251,20 @@ export function MapView() {
     };
 
     fetchRecommendations();
-  }, [roundedHour]); // Abhängigkeit geändert auf roundedHour
+  }, [roundedHour, userIndex]); // Abhängigkeit geändert auf roundedHour und userIndex
 
   // Sucht Orte auf Foursquare basierend auf den erhaltenen Kategorien
   useEffect(() => {
     if (recommendations.length === 0) return;
+    
+    let isActive = true; // Verhindert State-Updates, wenn die Komponente unmounted wird
 
     const fetchFoursquarePlaces = async () => {
       const fetchedPlaces: FoursquarePlace[] = [];
 
       for (let index = 0; index < recommendations.length; index++) {
+        if (!isActive) break; // Schleife abbrechen, falls Komponente nicht mehr existiert
+        
         const category = recommendations[index];
         
         try {
@@ -205,28 +286,43 @@ export function MapView() {
           
           const result = await response.json();
           
-          if (result.results && result.results.length > 0) {
+          if (isActive && result.results && result.results.length > 0) {
             const place = result.results[0];
-            fetchedPlaces.push({
-              id: place.id,
-              name: place.name,
-              lat: place.lat,
-              lng: place.lng,
-              category: category,
-              address: place.address,
-              website: place.website
-            });
+            const existingPlace = fetchedPlaces.find(p => p.id === place.id);
+            
+            if (existingPlace) {
+              // Ort ist schon da! Füge nur die neue Kategorie zum Array hinzu
+              if (!existingPlace.categories.includes(category)) {
+                existingPlace.categories.push(category);
+              }
+            } else {
+              fetchedPlaces.push({
+                id: place.id,
+                name: place.name,
+                lat: place.lat,
+                lng: place.lng,
+                categories: [category], // Array statt String
+                address: place.address,
+                website: place.website
+              });
+            }
           }
         } catch (error) {
           console.error(`❌ Fehler beim Abrufen der Foursquare-Daten für '${category}':`, error);
         }
       }
 
-      setFoursquarePlaces(fetchedPlaces);
+      if (isActive) {
+        setFoursquarePlaces(fetchedPlaces);
+      }
     };
 
     fetchFoursquarePlaces();
-  }, [recommendations]);
+    
+    return () => {
+      isActive = false; // Cleanup-Funktion, die aufgerufen wird, wenn sich die Komponente schließt
+    };
+  }, [recommendations, userPos]); // userPos als Dependency hinzugefügt
 
   // Hilfsfunktion zum Formatieren der Zeit für den Input
   const timeString = `${currentTime.getHours().toString().padStart(2, '0')}:${currentTime.getMinutes().toString().padStart(2, '0')}`;
@@ -238,30 +334,41 @@ export function MapView() {
       <div className="absolute inset-0 z-0 [&_.leaflet-control-attribution]:hidden">
         <MapContainer 
           center={userPos} 
-          zoom={15} 
+          zoom={14} 
           zoomControl={false}
           style={{ height: "100%", width: "100%", zIndex: 0 }}
         >
+          <MapBoundsUpdater positions={mapPositions} />
           <TileLayer
             url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"
             attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
           />
           
-          {/* User Marker */}
+          {/* User Marker (Simulierte aktuelle Position) */}
           <Marker position={userPos} icon={createUserIcon()}>
             <Popup className="rounded-xl overflow-hidden shadow-xl border-none">
-              <div className="text-center font-semibold text-gray-900 py-1">You are here<br/><span className="font-normal text-xs text-gray-500">TUM Campus Garching</span></div>
+              <div className="text-center font-semibold text-gray-900 py-1">You are here<br/><span className="font-normal text-xs text-gray-500">Simulated Location</span></div>
             </Popup>
           </Marker>
 
+          {/* Actual Checkin Marker */}
+          {actualCheckinPos && (
+            <Marker position={actualCheckinPos} icon={createActualCheckinIcon()}>
+              <Popup className="rounded-xl overflow-hidden shadow-xl border-none">
+                <div className="text-center font-semibold text-gray-900 py-1">Actual Next Check-in<br/><span className="font-normal text-xs text-gray-500">{actualCheckinName}</span></div>
+              </Popup>
+            </Marker>
+          )}
+
           {/* Dynamische Foursquare Marker */}
-          {!loading && foursquarePlaces.map((place) => {
-          const cfg = getCategoryConfig(place.category)
+          {!loading && foursquarePlaces.map((place, index) => {
+          const mainCategory = place.categories[0]; // Das Pin-Icon basiert auf der wichtigsten/ersten Kategorie
+          const cfg = getCategoryConfig(mainCategory);
           return (
             <Marker
-              key={place.id}
+              key={`${place.id}-${index}`}
               position={[place.lat, place.lng]}
-              icon={createRecommendationIcon(place.category)}
+              icon={createRecommendationIcon(mainCategory)}
             >
               <Popup className="!p-0 border-none overflow-hidden rounded-xl shadow-lg m-0 w-[200px]">
                 <div className="flex flex-col">
@@ -276,9 +383,15 @@ export function MapView() {
                       {place.address}
                     </p>
                     <div className="flex flex-wrap items-center gap-1.5">
-                      <span className={`inline-flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-full ${cfg.badge}`}>
-                        <span className="material-symbols-outlined text-[12px]">{cfg.icon}</span> {place.category}
-                      </span>
+                      {/* Render alle zutreffenden Kategorien als kleine Badges */}
+                      {place.categories.map((cat, i) => {
+                        const catCfg = getCategoryConfig(cat);
+                        return (
+                          <span key={i} className={`inline-flex items-center gap-1 text-[10px] font-medium px-2 py-0.5 rounded-full ${catCfg.badge}`}>
+                            <span className="material-symbols-outlined text-[12px]">{catCfg.icon}</span> {cat}
+                          </span>
+                        );
+                      })}
                       {place.website && (
                         <a href={place.website} target="_blank" rel="noopener noreferrer"
                           className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 hover:bg-blue-100 transition-colors">
@@ -302,8 +415,8 @@ export function MapView() {
           <MapPin className="w-5 h-5 text-gray-400" />
           <input 
             type="text" 
-            placeholder="Search destination..." 
-            defaultValue="Garching Forschungszentrum"
+            placeholder="Search places in NYC..." 
+            defaultValue="New York City"
             className="bg-transparent border-none outline-none w-full text-sm font-medium placeholder:text-gray-400"
           />
         </div>
@@ -350,6 +463,13 @@ export function MapView() {
       
       {/* Dev / Prototype Controls */}
       <div className="absolute bottom-32 right-4 flex flex-col gap-2 z-[1000]">
+        <button 
+          onClick={() => setUserIndex(prev => prev + 1)}
+          className="w-12 h-12 bg-white/90 backdrop-blur-md rounded-full shadow-[0_4px_12px_rgba(0,0,0,0.1)] border border-gray-100 flex items-center justify-center text-blue-600 hover:bg-white active:scale-95 transition-all"
+          title="Next Example User"
+        >
+          <SkipForward className="w-5 h-5" />
+        </button>
         <button 
           onClick={() => triggerNotification({
             title: foursquarePlaces[0]?.name || "Notification",

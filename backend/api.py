@@ -18,7 +18,7 @@ CATEGORY_RECOMMENDER_PATH = "trained_model.pkl"
 FOURSQUARE_API_KEY = os.getenv("FOURSQUARE_API_KEY")
 KMEANS_MODEL_PATH = "user_clustering_model.pkl"
 USER_FEATURES_PATH = "../data/user_partitioning.parquet"
-CHECKINS_FILE = "../data/foursquare_checkins_nyc.parquet"
+CHECKINS_FILE = "../data/preprocessed_checkins_nyc.parquet"
 
 app = FastAPI()
 
@@ -203,13 +203,48 @@ def get_example_user_recommendations(user_index: int = 0, hour: int = None):
         if checkins_df is not None:
             user_checkins = checkins_df[checkins_df['user_id'] == user_id]
             num_checkins = len(user_checkins)
+            
+            target_time_str = None
+            # Letzten Check-in als "Live-Test" Position verwenden
+            if num_checkins > 0:
+                if 'utc_time' in user_checkins.columns:
+                    last_checkin = user_checkins.sort_values('utc_time').iloc[-1]
+                    
+                    # Lokale Zeit des Check-ins berechnen
+                    try:
+                        utc_time = pd.to_datetime(last_checkin['utc_time'])
+                        if utc_time.tzinfo is not None:
+                            utc_time = utc_time.tz_convert(None) # Macht die Zeit zeitzonen-naiv (reines UTC)
+                        tz_offset = int(last_checkin.get('timezone_offset', 0))
+                        local_time = utc_time + pd.Timedelta(minutes=tz_offset)
+                        target_time_str = local_time.isoformat()
+                    except Exception as e:
+                        print(f"Time parse error: {e}")
+                else:
+                    last_checkin = user_checkins.iloc[-1]
+                    
+                target_lat = float(last_checkin['latitude'])
+                target_lng = float(last_checkin['longitude'])
+                target_name = str(last_checkin.get('venue_category_name', 'Unknown Place'))
+            else:
+                target_lat, target_lng = 40.7128, -74.0060  # NYC Default Fallback
+                target_name = "Unknown Place"
         else:
             num_checkins = "unknown"
+            target_time_str = None
+            target_lat, target_lng = 40.7128, -74.0060  # NYC Default Fallback
+            target_name = "Unknown Place"
         
         return {
             "user_index": user_index,
             "user_id": int(user_id),
             "num_checkins": num_checkins,
+            "location": {
+                "lat": target_lat,
+                "lng": target_lng,
+                "name": target_name,
+                "local_time": target_time_str
+            },
             "category_distribution": user_categories,
             "predicted_cluster": predicted_cluster,
             "requested_hour": hour,
@@ -268,7 +303,8 @@ async def search_foursquare(
     lat: float,
     lng: float,
     radius: int = 1500,
-    limit: int = 1
+    limit: int = 1,
+    sort: str = "POPULARITY"  # Optionen: RELEVANCE, RATING, DISTANCE, POPULARITY
 ):
     """
     Sucht Orte auf Foursquare über ein Backend-Proxy um CORS-Probleme zu vermeiden.
@@ -285,6 +321,7 @@ async def search_foursquare(
             "ll": f"{lat},{lng}",
             "radius": str(radius),
             "limit": str(limit),
+            "sort": sort,
             "fields": "fsq_place_id,name,latitude,longitude,location,website"
         }
         
