@@ -44,18 +44,47 @@ class UserPartitioningRecommender:
         user_category_counts = user_category_counts[self.top_level_1_categories]
         
         # Normalisiere zu Prozenten (0-1)
-        user_category_proportions = user_category_counts.div(user_category_counts.sum(axis=1), axis=0).fillna(0)
+        user_features = user_category_counts.div(user_category_counts.sum(axis=1), axis=0).fillna(0)
+        
+        # --- ZUSÄTZLICHE FEATURES (Temporal & Behavioral) ---
+        df_temp = df.copy()
+        if not pd.api.types.is_datetime64_any_dtype(df_temp['utc_time']):
+            df_temp['utc_time'] = pd.to_datetime(df_temp['utc_time'])
+        df_temp['local_time'] = df_temp['utc_time'] + pd.to_timedelta(df_temp['timezone_offset'], unit='m')
+        
+        # 1. Tageszeit-Präferenzen (Morning, Afternoon, Evening, Night)
+        df_temp['hour'] = df_temp['local_time'].dt.hour
+        conditions = [
+            (df_temp['hour'] >= 6) & (df_temp['hour'] < 12),
+            (df_temp['hour'] >= 12) & (df_temp['hour'] < 18),
+            (df_temp['hour'] >= 18) & (df_temp['hour'] < 24)
+        ]
+        df_temp['time_of_day'] = np.select(conditions, ['morning', 'afternoon', 'evening'], default='night')
+        tod_counts = df_temp.groupby(['user_id', 'time_of_day']).size().unstack(fill_value=0)
+        tod_prop = tod_counts.div(tod_counts.sum(axis=1), axis=0).fillna(0)
+        
+        # 2. Wochenend-Präferenz (Wochenend-Checkins / Total Checkins)
+        df_temp['is_weekend'] = df_temp['local_time'].dt.dayofweek.isin([5, 6]).astype(int)
+        wknd_counts = df_temp.groupby(['user_id', 'is_weekend']).size().unstack(fill_value=0)
+        wknd_prop = wknd_counts.div(wknd_counts.sum(axis=1), axis=0).fillna(0)
+        weekend_ratio = wknd_prop[1].rename('weekend_ratio') if 1 in wknd_prop.columns else pd.Series(0, index=user_features.index, name='weekend_ratio')
+        
+        # 3. Exploration Rate (Unique Venues / Total Checkins)
+        exploration_rate = df_temp.groupby('user_id').apply(lambda x: x['venue_id'].nunique() / len(x)).rename('exploration_rate')
+        
+        # Alles zusammenführen
+        user_features = pd.concat([user_features, tod_prop, weekend_ratio, exploration_rate], axis=1).fillna(0)
+        
+        # Feature-Column-Namen für später merken (Reihenfolge ist wichtig!)
+        self.feature_columns = list(user_features.columns)
         
         # Reset Index um user_id als Spalte zu bekommen
-        user_category_proportions = user_category_proportions.reset_index()
+        user_features = user_features.reset_index()
         
-        # Feature-Column-Namen für später
-        self.feature_columns = self.top_level_1_categories
+        print(f"  ✅ Extrahiert {len(self.feature_columns)} Features für {len(user_features)} unique Users")
+        print(f"  Shape: {user_features.shape}")
         
-        print(f"  ✅ Extrahiert Features für {len(user_category_proportions)} unique Users")
-        print(f"  Shape: {user_category_proportions.shape}")
-        
-        return user_category_proportions
+        return user_features
     
     def fit(self, df: pd.DataFrame) -> pd.DataFrame:
         """

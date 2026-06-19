@@ -130,15 +130,18 @@ def get_recommendations_by_cluster(hour: int = None, cluster: int = None):
 
 
 @app.post("/api/user-cluster")
-async def predict_user_cluster(user_categories: dict):
+async def predict_user_cluster(user_features: dict):
     """
-    Sagt den Cluster für einen User vorher basierend auf seiner Kategorien-Verteilung.
+    Sagt den Cluster für einen User vorher basierend auf seiner Kategorien-Verteilung und Verhaltens-Features.
     
     Input Example:
     {
         "Retail": 0.3,
         "Dining and Drinking": 0.5,
         "Arts and Entertainment": 0.1,
+        "exploration_rate": 0.7,
+        "morning": 0.2,
+        "weekend_ratio": 0.4
         ...
     }
     
@@ -149,7 +152,7 @@ async def predict_user_cluster(user_categories: dict):
         return {"error": "K-Means Clustering Modell nicht geladen"}
     
     try:
-        cluster = kmeans_clustering_model.predict_user_cluster(user_categories)
+        cluster = kmeans_clustering_model.predict_user_cluster(user_features)
         return {
             "predicted_cluster": int(cluster),
             "confidence": "high"  # Kann später erweitert werden
@@ -190,10 +193,14 @@ def get_example_user_recommendations(user_index: int = 0, hour: int = None):
         user_id = user_row['user_id']
         predicted_cluster = int(user_row['cluster'])
         
-        # 2. Kategorien-Verteilung des Users extrahieren
-        # user_features_df hat Spalten: user_id, cluster, und die 9 feature-Spalten
+        # 2. Alle Features des Users extrahieren
         feature_columns = [col for col in user_features_df.columns if col not in ['user_id', 'cluster']]
-        user_categories = {col: float(user_row[col]) for col in feature_columns}
+        all_features = {col: float(user_row[col]) for col in feature_columns}
+        
+        # In Kategorien und neue Features aufteilen (fürs Frontend)
+        behavioral_keys = ['morning', 'afternoon', 'evening', 'night', 'weekend_ratio', 'exploration_rate']
+        category_distribution = {k: v for k, v in all_features.items() if k not in behavioral_keys}
+        behavioral_features = {k: v for k, v in all_features.items() if k in behavioral_keys}
         
         # 3. Recommendations basierend auf Cluster + Hour
         cluster_data = category_model_dict.get(predicted_cluster, {})
@@ -245,7 +252,9 @@ def get_example_user_recommendations(user_index: int = 0, hour: int = None):
                 "name": target_name,
                 "local_time": target_time_str
             },
-            "category_distribution": user_categories,
+            "category_distribution": category_distribution,
+            "behavioral_features": behavioral_features,
+            "all_features": all_features,
             "predicted_cluster": predicted_cluster,
             "requested_hour": hour,
             "recommendations": {
@@ -303,7 +312,7 @@ async def search_foursquare(
     lat: float,
     lng: float,
     radius: int = 1500,
-    limit: int = 1,
+    limit: int = 3,
     sort: str = "POPULARITY"  # Optionen: RELEVANCE, RATING, DISTANCE, POPULARITY
 ):
     """

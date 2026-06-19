@@ -1,13 +1,13 @@
 {
-    "global_acc_1_spec": 16.55352669982212,
-    "global_hit_k_spec": 28.75086216284895,
-    "global_acc_1_lvl1": 49.94010237049407,
-    "global_hit_k_lvl1": 84.65894652775256,
-    "cluster_acc_1_spec": 20.978690964533342,
-    "cluster_hit_k_spec": 32.75855810070062,
-    "cluster_acc_1_lvl1": 57.7776164373616,
-    "cluster_hit_k_lvl1": 89.83555378081097,
-    "fsq_cat_hit_rate_at_3": 30.0,
-    "fsq_poi_hit_rate_at_3": 0.0,
-    "fsq_poi_hit_rate_at_9": 15.0
+    "global_acc_1_spec": 15.838990554899645,
+    "global_hit_k_spec": 27.774498229043683,
+    "global_acc_1_lvl1": 49.118211334120424,
+    "global_hit_k_lvl1": 84.75870720188901,
+    "cluster_acc_1_spec": 19.587514757969306,
+    "cluster_hit_k_spec": 31.965761511216055,
+    "cluster_acc_1_lvl1": 55.29442148760331,
+    "cluster_hit_k_lvl1": 88.37072018890201,
+    "fsq_cat_hit_rate_at_3": 0,
+    "fsq_poi_hit_rate_at_3": 0,
+    "fsq_poi_hit_rate_at_9": 0
 }

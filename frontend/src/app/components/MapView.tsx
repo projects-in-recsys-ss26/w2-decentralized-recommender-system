@@ -254,16 +254,17 @@ export function MapView() {
   }, [roundedHour, userIndex]); // Abhängigkeit geändert auf roundedHour und userIndex
 
   // Sucht Orte auf Foursquare basierend auf den erhaltenen Kategorien
+  // Sucht Orte auf Foursquare basierend auf den erhaltenen Kategorien
   useEffect(() => {
     if (recommendations.length === 0) return;
     
-    let isActive = true; // Verhindert State-Updates, wenn die Komponente unmounted wird
+    let isActive = true;
 
     const fetchFoursquarePlaces = async () => {
       const fetchedPlaces: FoursquarePlace[] = [];
 
       for (let index = 0; index < recommendations.length; index++) {
-        if (!isActive) break; // Schleife abbrechen, falls Komponente nicht mehr existiert
+        if (!isActive) break;
         
         const category = recommendations[index];
         
@@ -272,13 +273,12 @@ export function MapView() {
             await new Promise(resolve => setTimeout(resolve, 500));
           }
           
+          // HIER GEÄNDERT: limit=3
           const response = await fetch(
-            `http://localhost:8000/api/foursquare/search?query=${encodeURIComponent(category)}&lat=${userPos[0]}&lng=${userPos[1]}&radius=1500&limit=1`,
+            `http://localhost:8000/api/foursquare/search?query=${encodeURIComponent(category)}&lat=${userPos[0]}&lng=${userPos[1]}&radius=750&limit=3`,
             {
               method: "GET",
-              headers: {
-                Accept: "application/json",
-              },
+              headers: { Accept: "application/json" },
             }
           );
 
@@ -286,26 +286,28 @@ export function MapView() {
           
           const result = await response.json();
           
+          // HIER GEÄNDERT: Schleife über alle gefundenen Orte (bis zu 3)
           if (isActive && result.results && result.results.length > 0) {
-            const place = result.results[0];
-            const existingPlace = fetchedPlaces.find(p => p.id === place.id);
-            
-            if (existingPlace) {
-              // Ort ist schon da! Füge nur die neue Kategorie zum Array hinzu
-              if (!existingPlace.categories.includes(category)) {
-                existingPlace.categories.push(category);
+            result.results.forEach((place: any) => {
+              const existingPlace = fetchedPlaces.find(p => p.id === place.id);
+              
+              if (existingPlace) {
+                // Ort ist schon da! Füge nur die neue Kategorie zum Array hinzu
+                if (!existingPlace.categories.includes(category)) {
+                  existingPlace.categories.push(category);
+                }
+              } else {
+                fetchedPlaces.push({
+                  id: place.id,
+                  name: place.name,
+                  lat: place.lat,
+                  lng: place.lng,
+                  categories: [category],
+                  address: place.address,
+                  website: place.website
+                });
               }
-            } else {
-              fetchedPlaces.push({
-                id: place.id,
-                name: place.name,
-                lat: place.lat,
-                lng: place.lng,
-                categories: [category], // Array statt String
-                address: place.address,
-                website: place.website
-              });
-            }
+            });
           }
         } catch (error) {
           console.error(`❌ Fehler beim Abrufen der Foursquare-Daten für '${category}':`, error);
@@ -320,9 +322,9 @@ export function MapView() {
     fetchFoursquarePlaces();
     
     return () => {
-      isActive = false; // Cleanup-Funktion, die aufgerufen wird, wenn sich die Komponente schließt
+      isActive = false;
     };
-  }, [recommendations, userPos]); // userPos als Dependency hinzugefügt
+  }, [recommendations, userPos]);
 
   // Hilfsfunktion zum Formatieren der Zeit für den Input
   const timeString = `${currentTime.getHours().toString().padStart(2, '0')}:${currentTime.getMinutes().toString().padStart(2, '0')}`;

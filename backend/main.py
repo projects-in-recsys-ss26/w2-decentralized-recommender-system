@@ -23,7 +23,7 @@ def save_model_dictionary(model_dict, filepath):
         pickle.dump(model_dict, f)
     print(f"=== Modell erfolgreich unter '{filepath}' gespeichert! 💾 ===")
 
-def run_scaling_experiment(checkin_df, api_key, offline_mode=True):
+def run_scaling_experiment(checkin_df, api_key, offline_mode=True, num_runs=3):
     """
     Trainiert und evaluiert das Modell iterativ mit steigender Anzahl an Usern,
     um den Lernfortschritt des Recommenders (Scaling Laws) zu messen.
@@ -35,49 +35,129 @@ def run_scaling_experiment(checkin_df, api_key, offline_mode=True):
     os.makedirs("statistics", exist_ok=True)
     
     all_users = checkin_df['user_id'].unique()
-    user_counts = [20, 50, 100, 150, 200, 300, 400, 600, len(all_users)]
+    user_counts = [20, 50, 100, 150, 200, 300, 400, 600, 800, 1000, len(all_users)]
     
+    seeds = [42 + i for i in range(num_runs)]
     results = []
     
-    for count in user_counts:
-        # Dynamisches k: 10% der Nutzerzahl, aber mindestens 2 Cluster
-        dynamic_k = max(2, count // 10)
-        
-        print(f"\n\n--- Evaluierung mit {count} Usern (k={dynamic_k}) ---")
-        # 1. Sample users (fixierter random state für Reproduzierbarkeit)
-        np.random.seed(42)
-        sampled_users = np.random.choice(all_users, size=min(count, len(all_users)), replace=False)
-        df_subset = checkin_df[checkin_df['user_id'].isin(sampled_users)].copy()
-        
-        # 2. Pipeline für dieses Subset durchlaufen
-        user_clustering_model = UserPartitioningRecommender(k=dynamic_k, top_categories=9)
-        user_features_subset = user_clustering_model.fit(df_subset)
-        
-        train_sub, val_sub, test_sub = split_data_chronologically(df_subset, train_ratio=0.6, val_ratio=0.2)
-        
-        model_sub = TimeBasedBaselineRecommender(top_k=3, use_user_clusters=True)
-        model_sub.fit(train_sub, user_cluster_df=user_features_subset)
-        
-        rec_metrics = evaluate_recommender(model_sub, test_sub, user_features_df=user_features_subset)
-        
-        # 3. Foursquare Evaluation (max_users=None, da das Cache API Calls verhindert!)
-        poi_metrics = evaluate_poi_retrieval(model_sub.popular_specific_by_hour_and_cluster, test_sub, user_features_subset, api_key, max_users=None, distance_threshold_meters=100, offline_mode=offline_mode)
-        
-        # 4. Speichern der Subset-Ergebnisse
-        combined_metrics = {
-            "num_users": count,
-            "k_clusters": dynamic_k,
-            "total_checkins": len(df_subset),
-            **rec_metrics,
-            **(poi_metrics if poi_metrics else {})
-        }
-        results.append(combined_metrics)
-        
-        pd.DataFrame(results).to_csv("statistics/scaling_results.csv", index=False)
-        with open("statistics/scaling_results.json", "w") as f:
-            json.dump(results, f, indent=4)
+    for dynamic_k in [2, 5, 10, 15, 20, 40, 100]:
+        for count in user_counts:
+            if count < dynamic_k:
+                count = dynamic_k  # Sicherstellen, dass die Anzahl der User nicht kleiner als k ist
+
+            print(f"\n\n--- Evaluierung mit {count} Usern (k={dynamic_k}) über {num_runs} Runs ---")
+            
+            run_metrics_list = []
+            avg_total_checkins = 0
+            
+            for run_idx, seed in enumerate(seeds):
+                print(f"\n  ▶ Run {run_idx + 1}/{num_runs} (Seed {seed})")
+                # 1. Sample users (wechselnder random state für echte Durchschnittswerte)
+                np.random.seed(seed)
+                sampled_users = np.random.choice(all_users, size=min(count, len(all_users)), replace=False)
+                df_subset = checkin_df[checkin_df['user_id'].isin(sampled_users)].copy()
+                avg_total_checkins += len(df_subset)
+                
+                # 2. Pipeline für dieses Subset durchlaufen
+                user_clustering_model = UserPartitioningRecommender(k=dynamic_k, top_categories=9)
+                user_features_subset = user_clustering_model.fit(df_subset)
+                
+                train_sub, val_sub, test_sub = split_data_chronologically(df_subset, train_ratio=0.6, val_ratio=0.2)
+                
+                model_sub = TimeBasedBaselineRecommender(top_k=3, use_user_clusters=True)
+                model_sub.fit(train_sub, user_cluster_df=user_features_subset)
+                
+                rec_metrics = evaluate_recommender(model_sub, test_sub, user_features_df=user_features_subset)
+                
+                # 3. Foursquare Evaluation (offline_mode=True schützt dein Limit)
+                poi_metrics = evaluate_poi_retrieval(model_sub.popular_specific_by_hour_and_cluster, test_sub, user_features_subset, api_key, max_users=None, distance_threshold_meters=100, offline_mode=offline_mode)
+                
+                combined = {**rec_metrics, **(poi_metrics if poi_metrics else {})}
+                run_metrics_list.append(combined)
+                
+            # 4. Durchschnitt aller Runs berechnen
+            avg_metrics = {}
+            for key in run_metrics_list[0].keys():
+                avg_metrics[key] = np.mean([run.get(key, 0) for run in run_metrics_list])
+                
+            # 5. Speichern der Subset-Ergebnisse
+            avg_results = {
+                "num_users": count,
+                "k_clusters": dynamic_k,
+                "total_checkins": int(avg_total_checkins / num_runs),
+                **avg_metrics
+            }
+            results.append(avg_results)
+            
+            pd.DataFrame(results).to_csv("statistics/scaling_results.csv", index=False)
+            with open("statistics/scaling_results.json", "w") as f:
+                json.dump(results, f, indent=4)
             
     print("\n✅ Scaling Experiment abgeschlossen! Ergebnisse in 'statistics/' gespeichert.")
+
+def run_system_growth_experiment(checkin_df, api_key, offline_mode=True, num_runs=3):
+    """
+    Simuliert eine wachsende Plattform: Das Modell trainiert auf immer mehr Usern,
+    wird aber konstant auf dem exakt selben globalen Test-Set (ALLEN Usern) evaluiert.
+    Unbekannte User im Test-Set fallen automatisch auf die globale Baseline zurück.
+    """
+    print("\n" + "="*70)
+    print("🌱 STARTING SYSTEM GROWTH EXPERIMENT (Global Test Set)")
+    print("="*70)
+    
+    os.makedirs("statistics", exist_ok=True)
+    
+    # 1. Wir splitten einmal initial ALLE User chronologisch in Train und Test
+    global_train, _, global_test = split_data_chronologically(checkin_df, train_ratio=0.6, val_ratio=0.2)
+    all_users = global_train['user_id'].unique()
+    
+    user_counts = [20, 50, 100, 150, 200, 300, 400, 600, 800, 1000, len(all_users)]
+    seeds = [42 + i for i in range(num_runs)]
+    results = []
+    
+    for dynamic_k in [2, 5, 10, 15, 20, 40, 100]:
+        for count in user_counts:
+            if count < dynamic_k:
+                count = dynamic_k
+
+            print(f"\n\n--- System Growth mit {count} bekannten Usern (k={dynamic_k}) über {num_runs} Runs ---")
+            
+            run_metrics_list = []
+            avg_total_checkins = 0
+            
+            for run_idx, seed in enumerate(seeds):
+                print(f"\n  ▶ Run {run_idx + 1}/{num_runs} (Seed {seed})")
+                np.random.seed(seed)
+                sampled_users = np.random.choice(all_users, size=min(count, len(all_users)), replace=False)
+                
+                # 2. Training NUR auf den Daten der aktuell bekannten User!
+                train_sub = global_train[global_train['user_id'].isin(sampled_users)].copy()
+                avg_total_checkins += len(train_sub)
+                
+                user_clustering_model = UserPartitioningRecommender(k=dynamic_k, top_categories=9)
+                user_features_sub = user_clustering_model.fit(train_sub)
+                
+                model_sub = TimeBasedBaselineRecommender(top_k=3, use_user_clusters=True)
+                model_sub.fit(train_sub, user_cluster_df=user_features_sub)
+                
+                # 3. Evaluation auf dem GESAMTEN Test-Set (auch unbekannte User)
+                rec_metrics = evaluate_recommender(model_sub, global_test, user_features_df=user_features_sub)
+                
+                # POI Evaluierung im Offline-Mode
+                poi_metrics = evaluate_poi_retrieval(model_sub.popular_specific_by_hour_and_cluster, global_test, user_features_sub, api_key, max_users=None, distance_threshold_meters=100, offline_mode=offline_mode)
+                
+                combined = {**rec_metrics, **(poi_metrics if poi_metrics else {})}
+                run_metrics_list.append(combined)
+                
+            # 4. Durchschnitt aller Runs berechnen
+            avg_metrics = {key: np.mean([run.get(key, 0) for run in run_metrics_list]) for key in run_metrics_list[0].keys()}
+            results.append({"num_users": count, "k_clusters": dynamic_k, "total_checkins": int(avg_total_checkins / num_runs), **avg_metrics})
+            
+            pd.DataFrame(results).to_csv("statistics/system_growth_results.csv", index=False)
+            with open("statistics/system_growth_results.json", "w") as f:
+                json.dump(results, f, indent=4)
+                
+    print("\n✅ System Growth Experiment abgeschlossen! Ergebnisse in 'statistics/' gespeichert.")
 
 def main():
     # -- Preprocessing --------------------------------------------------------
@@ -173,7 +253,10 @@ def main():
     print(f"\n✅ Standard-Evaluierung unter 'statistics/standard_evaluation.json' gespeichert.")
 
     # -- SCALING EXPERIMENT ---------------------------------------------------
-    run_scaling_experiment(checkin_df, api_key, offline_mode=True)
+    # run_scaling_experiment(checkin_df, api_key, offline_mode=True)
+    
+    # -- SYSTEM GROWTH EXPERIMENT ---------------------------------------------
+    run_system_growth_experiment(checkin_df, api_key, offline_mode=True)
     
     print("\n🎉 TRAINING COMPLETE!")
     print("="*70)

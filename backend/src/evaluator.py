@@ -8,23 +8,29 @@ import requests
 
 def split_data_chronologically(df: pd.DataFrame, train_ratio=0.6, val_ratio=0.2):
     """
-    Splittet die Daten chronologisch in Train, Val und Test, 
+    Splittet die Daten chronologisch PRO USER in Train, Val und Test, 
     um Data Leakage (Blick in die Zukunft) zu vermeiden.
     """
-    print("🔄 Splitting data chronologically...")
+    print("🔄 Splitting data chronologically per user...")
     
     # Sicherstellen, dass nach Zeit sortiert ist
     if not pd.api.types.is_datetime64_any_dtype(df['utc_time']):
         df['utc_time'] = pd.to_datetime(df['utc_time'])
-    df = df.sort_values(by='utc_time').reset_index(drop=True)
     
-    n_total = len(df)
-    train_end = int(n_total * train_ratio)
-    val_end = int(n_total * (train_ratio + val_ratio))
+    df = df.sort_values(by=['user_id', 'utc_time']).reset_index(drop=True)
     
-    train_df = df.iloc[:train_end].copy()
-    val_df = df.iloc[train_end:val_end].copy()
-    test_df = df.iloc[val_end:].copy()
+    # Berechne die relative Position jedes Check-ins für jeden User
+    user_counts = df.groupby('user_id').size()
+    ranks = df.groupby('user_id').cumcount()
+    totals = df['user_id'].map(user_counts)
+    
+    train_mask = ranks < (totals * train_ratio)
+    val_mask = (ranks >= (totals * train_ratio)) & (ranks < (totals * (train_ratio + val_ratio)))
+    test_mask = ranks >= (totals * (train_ratio + val_ratio))
+    
+    train_df = df[train_mask].copy()
+    val_df = df[val_mask].copy()
+    test_df = df[test_mask].copy()
     
     print(f"📊 Split result: Train ({len(train_df)}), Val ({len(val_df)}), Test ({len(test_df)})")
     return train_df, val_df, test_df
@@ -92,20 +98,25 @@ def evaluate_recommender(model, test_df: pd.DataFrame, user_features_df: pd.Data
                 hits_at_k_lvl1_global += 1
         
         # ===== CLUSTER-BASIERTE RECOMMENDATIONS =====
-        if use_clusters and pd.notna(row.get('cluster')):
-            user_cluster = int(row['cluster'])
-            recommendations_cluster = model.recommend(hour, user_cluster=user_cluster)
+        if use_clusters:
+            if pd.notna(row.get('cluster')):
+                user_cluster = int(row['cluster'])
+                recommendations_cluster = model.recommend(hour, user_cluster=user_cluster)
+            else:
+                # Fallback auf Global Recommendation für unbekannte User (Cold Start)
+                recommendations_cluster = model.recommend(hour)
+                
             rec_specific_cluster = recommendations_cluster['specific']
             rec_level1_cluster = recommendations_cluster['level_1']
             
-            # Spezifische Kategorie (Cluster)
+            # Spezifische Kategorie (Cluster oder Global-Fallback)
             if rec_specific_cluster:
                 if actual_specific == rec_specific_cluster[0]:
                     hits_at_1_spec_cluster += 1
                 if actual_specific in rec_specific_cluster:
                     hits_at_k_spec_cluster += 1
             
-            # Level 1 Kategorie (Cluster)
+            # Level 1 Kategorie (Cluster oder Global-Fallback)
             if rec_level1_cluster:
                 if actual_level1 == rec_level1_cluster[0]:
                     hits_at_1_lvl1_cluster += 1
@@ -143,8 +154,8 @@ def evaluate_recommender(model, test_df: pd.DataFrame, user_features_df: pd.Data
     
     if use_clusters and cluster_total > 0:
         print("\n" + "-" * 70)
-        print("🎯 CLUSTER-BASIERTE RECOMMENDATIONS")
-        print(f"   (Samples mit Cluster: {cluster_total} / {total})")
+        print("🎯 CLUSTER-BASIERTE RECOMMENDATIONS (Blended System Performance)")
+        print(f"   (Evaluierte Samples gesamt: {cluster_total} / {total})")
         print("-" * 70)
         print("🎯 SPEZIFISCHE KATEGORIE (z.B. Sushi Restaurant)")
         print(f"   Accuracy @ 1: {acc_1_spec_cluster:.2f}%")
@@ -215,8 +226,11 @@ def evaluate_poi_retrieval(trained_dict, test_df, user_features_df, api_key, max
     cache_file = "foursquare_api_cache.json"
     api_cache = {}
     if os.path.exists(cache_file):
-        with open(cache_file, 'r') as f:
-            api_cache = json.load(f)
+        with open(cache_file, 'r', encoding='utf-8') as f:
+            try:
+                api_cache = json.load(f)
+            except Exception:
+                api_cache = {}  # Falls die Datei durch den letzten Absturz beschädigt wurde
 
     headers = {
         "Accept": "application/json",
@@ -236,12 +250,16 @@ def evaluate_poi_retrieval(trained_dict, test_df, user_features_df, api_key, max
     print("Frage Foursquare API ab (Nutze Caching, wo möglich)...")
     
     api_limit_reached = False
+    api_cache_updated = False
+    
     for idx, (_, row) in enumerate(test_samples.iterrows()):
         if idx % 10 == 0 and idx > 0:
             print(f"  > Evaluiere User {idx}/{total}...")
-            # Zwischenspeichern des Caches, falls das Skript abgebrochen wird
-            with open(cache_file, 'w') as f:
-                json.dump(api_cache, f)
+            if api_cache_updated:
+                # Zwischenspeichern des Caches nur, wenn es Änderungen gab
+                with open(cache_file, 'w', encoding='utf-8') as f:
+                    json.dump(api_cache, f)
+                api_cache_updated = False
             
         user_id = row['user_id']
         actual_cat = row['venue_category_name']  # Spezifische Kategorie für das Modell
@@ -304,6 +322,7 @@ def evaluate_poi_retrieval(trained_dict, test_df, user_features_df, api_key, max
                         if resp.status_code == 200:
                             results = resp.json().get('results', [])
                             api_cache[cache_key] = results
+                            api_cache_updated = True
                         elif resp.status_code in [403, 429]:
                             print(f"\n❌ FOURSQUARE API LIMIT EXCEEDED (Status {resp.status_code})! Stoppe Live-Anfragen.")
                             api_limit_reached = True
@@ -335,8 +354,9 @@ def evaluate_poi_retrieval(trained_dict, test_df, user_features_df, api_key, max
         total_evaluated += 1
 
     # Abschließendes Speichern des Caches (verhindert Datenverlust)
-    with open(cache_file, 'w') as f:
-        json.dump(api_cache, f)
+    if api_cache_updated:
+        with open(cache_file, 'w', encoding='utf-8') as f:
+            json.dump(api_cache, f)
 
     print("\n" + "="*50)
     print(f"📊 FOURSQUARE POI RETRIEVAL RESULTS (N={total_evaluated} evaluiert von {total})")
