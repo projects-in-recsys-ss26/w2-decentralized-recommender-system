@@ -10,6 +10,7 @@ from typing import Optional
 from dotenv import load_dotenv
 import asyncio
 import time
+import numpy as np
 
 # .env Datei laden
 load_dotenv()
@@ -19,6 +20,7 @@ FOURSQUARE_API_KEY = os.getenv("FOURSQUARE_API_KEY")
 KMEANS_MODEL_PATH = "user_clustering_model.pkl"
 USER_FEATURES_PATH = "../data/user_partitioning.parquet"
 CHECKINS_FILE = "../data/preprocessed_checkins_nyc.parquet"
+VENUES_FILE = "../data/venues.parquet"
 
 app = FastAPI()
 
@@ -36,6 +38,7 @@ category_model_dict = {}
 kmeans_clustering_model = None
 user_features_df = None
 checkins_df = None
+venues_df = None
 
 @app.on_event("startup")
 def load_model_on_startup():
@@ -43,7 +46,7 @@ def load_model_on_startup():
     Lädt das fertige Modell beim Starten der API einmalig aus der Datei.
     Es findet kein Training statt.
     """
-    global category_model_dict, kmeans_clustering_model, user_features_df, checkins_df
+    global category_model_dict, kmeans_clustering_model, user_features_df, checkins_df, venues_df
     print("Starte API-Server...")
     
     if os.path.exists(CATEGORY_RECOMMENDER_PATH):
@@ -72,6 +75,12 @@ def load_model_on_startup():
         print(f"=== Checkins-Daten geladen! ({len(checkins_df)} Checkins) ===")
     else:
         print(f"⚠️ WARNUNG: '{CHECKINS_FILE}' wurde nicht gefunden.")
+        
+    if os.path.exists(VENUES_FILE):
+        venues_df = pd.read_parquet(VENUES_FILE)
+        print(f"=== Venues-Datenbank geladen! ({len(venues_df)} Venues) ===")
+    else:
+        print(f"⚠️ WARNUNG: '{VENUES_FILE}' wurde nicht gefunden. Bitte backend/tools/create_venue_db.py ausführen.")
 
 
 @app.get("/api/recommendations")
@@ -258,7 +267,7 @@ def get_example_user_recommendations(user_index: int = 0, hour: int = None):
             "predicted_cluster": predicted_cluster,
             "requested_hour": hour,
             "recommendations": {
-                "top_3_categories": top_categories,
+                "top_categories": top_categories,
                 "cluster_data": cluster_data,
                 "type": "cluster_specific"
             }
@@ -306,77 +315,77 @@ def get_example_users_list(limit: int = 10):
         return {"error": str(e)}
 
 
-@app.get("/api/foursquare/search")
-async def search_foursquare(
+def haversine_vectorized(lat1, lon1, lat2, lon2):
+    """
+    Berechnet die Distanz in Metern zwischen zwei Punkten auf der Erde.
+    Unterstützt Numpy Arrays für lat2, lon2.
+    """
+    lat1, lon1, lat2, lon2 = map(np.radians, [lat1, lon1, lat2, lon2])
+    dlat = lat2 - lat1
+    dlon = lon2 - lon1
+    a = np.sin(dlat/2.0)**2 + np.cos(lat1) * np.cos(lat2) * np.sin(dlon/2.0)**2
+    c = 2 * np.arcsin(np.sqrt(a))
+    r = 6371000 # Radius der Erde in Metern
+    return c * r
+
+@app.get("/api/venues/search")
+async def search_venues(
     query: str,
     lat: float,
     lng: float,
     radius: int = 1500,
-    limit: int = 3,
-    sort: str = "POPULARITY"  # Optionen: RELEVANCE, RATING, DISTANCE, POPULARITY
+    limit: int = 3
 ):
     """
-    Sucht Orte auf Foursquare über ein Backend-Proxy um CORS-Probleme zu vermeiden.
+    Sucht Orte in der lokalen Venue-Datenbank basierend auf der Kategorie (query) und Distanz.
+    Ersetzt die alte Foursquare API.
     """
-    print(f"🔍 Foursquare Search: query='{query}', lat={lat}, lng={lng}, radius={radius}")
+    print(f"🔍 Local Venue Search: query='{query}', lat={lat}, lng={lng}, radius={radius}")
     
-    if not FOURSQUARE_API_KEY:
-        print("❌ Foursquare API Key nicht konfiguriert!")
-        return {"error": "Foursquare API Key nicht konfiguriert"}
+    if venues_df is None:
+        print("❌ Venues Datenbank nicht geladen!")
+        return {"error": "Venues Datenbank nicht geladen"}
     
     try:
-        search_params = {
-            "query": query,
-            "ll": f"{lat},{lng}",
-            "radius": str(radius),
-            "limit": str(limit),
-            "sort": sort,
-            "fields": "fsq_place_id,name,latitude,longitude,location,website"
-        }
+        # 1. Filtern nach Kategorie (query)
+        # Die Foursquare Kategorie entspricht in unserer DB der 'category' Spalte
+        filtered_df = venues_df[venues_df['category'].str.lower() == query.lower()].copy()
         
-        headers = {
-            "Accept": "application/json",
-            "Authorization": f"Bearer {FOURSQUARE_API_KEY}",
-            "X-Places-Api-Version": "2025-06-17",
-        }
-        
-        async with httpx.AsyncClient() as client:
-            response = await client.get(
-                "https://places-api.foursquare.com/places/search",
-                params=search_params,
-                headers=headers,
-                timeout=10.0
-            )
-        
-        if response.status_code != 200:
-            print(f"❌ Foursquare API error: {response.status_code} \n {response.text}")
-            return {"error": f"Foursquare API error: {response.status_code}"}
+        if filtered_df.empty:
+            print(f"⚠️ Keine Venues für Kategorie '{query}' gefunden.")
+            return {"results": []}
             
-        data = response.json()
-        print(f"📍 Foursquare Response für '{query}':", data)
+        # 2. Distanz berechnen
+        distances = haversine_vectorized(lat, lng, filtered_df['latitude'].values, filtered_df['longitude'].values)
+        filtered_df['distance'] = distances
+        
+        # 3. Filtern nach Radius und sortieren nach Popularität (checkin_count) statt Distanz
+        nearby_df = filtered_df[filtered_df['distance'] <= radius].sort_values('checkin_count', ascending=False)
+        
+        # 4. Limit anwenden
+        top_venues = nearby_df.head(limit)
         
         # Formatiere die Ergebnisse für das Frontend
         formatted_results = []
-        if data.get("results"):
-            for place in data["results"]:
-                formatted_place = {
-                    "id": place.get("fsq_place_id"),
-                    "name": place.get("name"),
-                    "lat": place.get("latitude"),
-                    "lng": place.get("longitude"),
-                    "address": place.get("location", {}).get("formatted_address", "No address"),
-                    "website": place.get("website"),
-                }
-                formatted_results.append(formatted_place)
-                print(f"✅ Place found: {formatted_place['name']} ({formatted_place['id']})")
-        else:
-            print(f"⚠️  Keine Ergebnisse für '{query}' gefunden")
-        
+        for _, place in top_venues.iterrows():
+            formatted_place = {
+                "id": str(place['venue_id']),
+                "name": str(place['category']), # Wir verwenden die Kategorie als Namen, da spezifische Namen fehlen
+                "lat": float(place['latitude']),
+                "lng": float(place['longitude']),
+                "distance": float(place['distance']),
+                "popularity": int(place.get('checkin_count', 0)),
+                "address": "", # Historische Daten haben keine Adresse
+                "website": "", # Historische Daten haben keine Website
+            }
+            formatted_results.append(formatted_place)
+            print(f"✅ Place found: {formatted_place['name']} ({formatted_place['id']}) an Distanz {formatted_place['distance']:.1f}m mit {formatted_place['popularity']} Check-ins")
+            
         print(f"📤 Returning {len(formatted_results)} result(s) for '{query}'\n")
         return {"results": formatted_results}
     
     except Exception as e:
-        print(f"❌ Exception in search_foursquare: {str(e)}")
+        print(f"❌ Exception in search_venues: {str(e)}")
         return {"error": str(e)}
 
 if __name__ == "__main__":

@@ -3,7 +3,7 @@ import { NotificationBanner } from "./NotificationBanner";
 
 export function PhoneLayout({ children }: { children: React.ReactNode }) {
   return (
-    <div className="min-h-screen bg-neutral-900 flex items-center justify-center p-4 sm:p-8">
+    <div className="min-h-screen bg-white flex items-center justify-center p-4 sm:p-8">
       {/* iPhone 16 Style Outer Frame */}
       <div className="relative w-full max-w-[393px] aspect-[393/852] bg-zinc-950 rounded-[55px] shadow-[0_0_0_1px_#444,0_0_0_5px_#111,0_25px_50px_-12px_rgba(0,0,0,1)] flex items-center justify-center flex-shrink-0">
 

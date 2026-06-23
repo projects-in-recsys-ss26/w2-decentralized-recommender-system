@@ -6,15 +6,13 @@ import L from "leaflet";
 import { useNotification } from "./NotificationContext";
 import categoryLevel1Map from '../../../../data/category_level1_map.json'
 
-// Interface für die Foursquare Orte im State
-interface FoursquarePlace {
+// Interface für die lokalen Orte im State
+interface VenuePlace {
   id: string;
   name: string;
   lat: number;
   lng: number;
   categories: string[];
-  address?: string;
-  website?: string;
 }
 
 // Create custom icons using DivIcon for Tailwind styling compatibility
@@ -55,7 +53,7 @@ const createActualCheckinIcon = () => {
   });
 };
 
-const createRecommendationIcon = (category: string) => {
+const createRecommendationIcon = (category: string, isMatch: boolean = false) => {
   const cfg = getCategoryConfig(category)
   
   const bgColorMap: Record<string, { bg: string; border: string }> = {
@@ -73,7 +71,11 @@ const createRecommendationIcon = (category: string) => {
   }
 
   const level1 = (categoryLevel1Map as Record<string, string>)[category]
-  const colors = bgColorMap[level1] ?? { bg: "#f9fafb", border: "#d1d5db" }
+  let colors = bgColorMap[level1] ?? { bg: "#f9fafb", border: "#d1d5db" }
+  
+  if (isMatch) {
+    colors = { bg: "#dcfce7", border: "#22c55e" } // Light green bg, bright green border
+  }
 
   return L.divIcon({
     html: `
@@ -170,7 +172,7 @@ export function MapView() {
   const timeSyncedUserIndexRef = useRef<number | null>(null);
 
   const [recommendations, setRecommendations] = useState<string[]>([]);
-  const [foursquarePlaces, setFoursquarePlaces] = useState<FoursquarePlace[]>([]);
+  const [foursquarePlaces, setFoursquarePlaces] = useState<VenuePlace[]>([]);
   const [loading, setLoading] = useState(true);
 
   // Berechnet die gerundete Stunde für die API (ab :30 aufrunden, sonst abrunden)
@@ -219,14 +221,14 @@ export function MapView() {
     const fetchRecommendations = async () => {
       try {
         setLoading(true);
-        setFoursquarePlaces([]); // Alte Foursquare-Orte löschen, bevor neue geladen werden!
+        setFoursquarePlaces([]); // Alte Orte löschen, bevor neue geladen werden!
         const response = await fetch(`http://localhost:8000/api/example-user-recommendations?user_index=${userIndex}&hour=${roundedHour}`);
         if (!response.ok) {
           throw new Error(`HTTP error! status: ${response.status}`);
         }
         const data = await response.json();
         console.log("📍 Backend Response:", data);
-        console.log("🎯 Top 3 Kategorien:", data.recommendations["top_3_categories"]);
+        console.log("🎯 Top Kategorien:", data.recommendations["top_categories"]);
         
         if (data.location) {
           const lat = data.location.lat;
@@ -242,7 +244,7 @@ export function MapView() {
           }
         }
         
-        setRecommendations(data.recommendations["top_3_categories"] || []);
+        setRecommendations(data.recommendations["top_categories"] || []);
       } catch (error) {
         console.error("❌ Fehler beim Abrufen der Empfehlungen:", error);
       } finally {
@@ -253,15 +255,14 @@ export function MapView() {
     fetchRecommendations();
   }, [roundedHour, userIndex]); // Abhängigkeit geändert auf roundedHour und userIndex
 
-  // Sucht Orte auf Foursquare basierend auf den erhaltenen Kategorien
-  // Sucht Orte auf Foursquare basierend auf den erhaltenen Kategorien
+  // Sucht lokale Orte basierend auf den erhaltenen Kategorien
   useEffect(() => {
     if (recommendations.length === 0) return;
     
     let isActive = true;
 
     const fetchFoursquarePlaces = async () => {
-      const fetchedPlaces: FoursquarePlace[] = [];
+      const fetchedPlaces: VenuePlace[] = [];
 
       for (let index = 0; index < recommendations.length; index++) {
         if (!isActive) break;
@@ -273,9 +274,8 @@ export function MapView() {
             await new Promise(resolve => setTimeout(resolve, 500));
           }
           
-          // HIER GEÄNDERT: limit=3
           const response = await fetch(
-            `http://localhost:8000/api/foursquare/search?query=${encodeURIComponent(category)}&lat=${userPos[0]}&lng=${userPos[1]}&radius=750&limit=3`,
+            `http://localhost:8000/api/venues/search?query=${encodeURIComponent(category)}&lat=${userPos[0]}&lng=${userPos[1]}&radius=750&limit=2`,
             {
               method: "GET",
               headers: { Accept: "application/json" },
@@ -302,15 +302,13 @@ export function MapView() {
                   name: place.name,
                   lat: place.lat,
                   lng: place.lng,
-                  categories: [category],
-                  address: place.address,
-                  website: place.website
+                  categories: [category]
                 });
               }
             });
           }
         } catch (error) {
-          console.error(`❌ Fehler beim Abrufen der Foursquare-Daten für '${category}':`, error);
+          console.error(`❌ Fehler beim Abrufen der Venues für '${category}':`, error);
         }
       }
 
@@ -328,6 +326,14 @@ export function MapView() {
 
   // Hilfsfunktion zum Formatieren der Zeit für den Input
   const timeString = `${currentTime.getHours().toString().padStart(2, '0')}:${currentTime.getMinutes().toString().padStart(2, '0')}`;
+
+  // Prüfen, ob der tatsächliche Check-in in den vorhergesagten Orten enthalten ist
+  const isPlaceMatch = (placeLat: number, placeLng: number) => {
+    if (!actualCheckinPos) return false;
+    // Toleranz von ca. 10 Metern
+    return Math.abs(placeLat - actualCheckinPos[0]) < 0.0001 && Math.abs(placeLng - actualCheckinPos[1]) < 0.0001;
+  };
+  const hasMatchedPrediction = actualCheckinPos && foursquarePlaces.some(p => isPlaceMatch(p.lat, p.lng));
 
   return (
     <div className="relative w-full h-full bg-slate-50">
@@ -354,7 +360,7 @@ export function MapView() {
           </Marker>
 
           {/* Actual Checkin Marker */}
-          {actualCheckinPos && (
+          {actualCheckinPos && !hasMatchedPrediction && (
             <Marker position={actualCheckinPos} icon={createActualCheckinIcon()}>
               <Popup className="rounded-xl overflow-hidden shadow-xl border-none">
                 <div className="text-center font-semibold text-gray-900 py-1">Actual Next Check-in<br/><span className="font-normal text-xs text-gray-500">{actualCheckinName}</span></div>
@@ -366,24 +372,23 @@ export function MapView() {
           {!loading && foursquarePlaces.map((place, index) => {
           const mainCategory = place.categories[0]; // Das Pin-Icon basiert auf der wichtigsten/ersten Kategorie
           const cfg = getCategoryConfig(mainCategory);
+          const isMatch = isPlaceMatch(place.lat, place.lng);
           return (
             <Marker
               key={`${place.id}-${index}`}
               position={[place.lat, place.lng]}
-              icon={createRecommendationIcon(mainCategory)}
+              icon={createRecommendationIcon(mainCategory, isMatch)}
             >
               <Popup className="!p-0 border-none overflow-hidden rounded-xl shadow-lg m-0 w-[200px]">
                 <div className="flex flex-col">
-                  <div className={`flex items-center justify-center h-16 ${cfg.bg}`}>
-                    <span className="material-symbols-outlined text-[48px] text-gray-500">{cfg.icon}</span>
+                  <div className={`flex items-center justify-center h-16 ${isMatch ? 'bg-green-50' : cfg.bg}`}>
+                    <span className={`material-symbols-outlined text-[48px] ${isMatch ? 'text-green-600' : 'text-gray-500'}`}>{cfg.icon}</span>
                   </div>
                   <div className="p-3 bg-white">
-                    <h3 className="font-semibold text-gray-900 text-sm leading-tight mb-1">
+                    <h3 className="font-semibold text-gray-900 text-sm leading-tight mb-2 flex items-center gap-1.5">
                       {place.name}
+                      {isMatch && <span className="material-symbols-outlined text-green-500 text-[16px]" title="Correct Prediction!">check_circle</span>}
                     </h3>
-                    <p className="text-[11px] text-gray-400 line-clamp-2 mb-2 leading-snug">
-                      {place.address}
-                    </p>
                     <div className="flex flex-wrap items-center gap-1.5">
                       {/* Render alle zutreffenden Kategorien als kleine Badges */}
                       {place.categories.map((cat, i) => {
@@ -394,12 +399,6 @@ export function MapView() {
                           </span>
                         );
                       })}
-                      {place.website && (
-                        <a href={place.website} target="_blank" rel="noopener noreferrer"
-                          className="text-[10px] font-medium px-2 py-0.5 rounded-full bg-blue-50 text-blue-700 hover:bg-blue-100 transition-colors">
-                          Website ↗
-                        </a>
-                      )}
                     </div>
                   </div>
                 </div>

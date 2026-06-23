@@ -22,24 +22,30 @@ class UserPartitioningRecommender:
         self.top_level_1_categories = []  # Die Top-9 Kategorien
         self.feature_columns = []  # Spalten-Namen der Features
         
-    def _extract_user_features(self, df: pd.DataFrame) -> pd.DataFrame:
+    def _extract_user_features(self, df: pd.DataFrame, inference: bool = False) -> pd.DataFrame:
         """
         Extrahiert pro User die prozentuale Verteilung der level_1 Kategorien.
         
         Returns:
             DataFrame mit user_id und prozentuale Features für die Top-9 level_1 Kategorien
         """
-        print("Extrahiere User-Features (Level-1 Kategorien Verteilung)...")
+        print(f"Extrahiere User-Features (Level-1 Kategorien Verteilung, inference={inference})...")
         
         # Gruppiere nach user_id und zähle level_1 Kategorien
         user_category_counts = df.groupby(['user_id', 'level_1']).size().unstack(fill_value=0)
         
-        # Finde die Top-9 level_1 Kategorien insgesamt
-        category_totals = df['level_1'].value_counts()
-        self.top_level_1_categories = category_totals.head(self.top_categories).index.tolist()
+        if not inference:
+            # Finde die Top-9 level_1 Kategorien insgesamt
+            category_totals = df['level_1'].value_counts()
+            self.top_level_1_categories = category_totals.head(self.top_categories).index.tolist()
+            
+            print(f"  Top-{self.top_categories} level_1 Kategorien: {self.top_level_1_categories}")
         
-        print(f"  Top-{self.top_categories} level_1 Kategorien: {self.top_level_1_categories}")
-        
+        # Missing categories with 0
+        for cat in self.top_level_1_categories:
+            if cat not in user_category_counts.columns:
+                user_category_counts[cat] = 0
+                
         # Behalte nur die Top-9 Kategorien
         user_category_counts = user_category_counts[self.top_level_1_categories]
         
@@ -75,8 +81,15 @@ class UserPartitioningRecommender:
         # Alles zusammenführen
         user_features = pd.concat([user_features, tod_prop, weekend_ratio, exploration_rate], axis=1).fillna(0)
         
-        # Feature-Column-Namen für später merken (Reihenfolge ist wichtig!)
-        self.feature_columns = list(user_features.columns)
+        if not inference:
+            # Feature-Column-Namen für später merken (Reihenfolge ist wichtig!)
+            self.feature_columns = list(user_features.columns)
+        else:
+            # Reorder columns to match training and handle any missing columns
+            for col in self.feature_columns:
+                if col not in user_features.columns:
+                    user_features[col] = 0
+            user_features = user_features[self.feature_columns]
         
         # Reset Index um user_id als Spalte zu bekommen
         user_features = user_features.reset_index()

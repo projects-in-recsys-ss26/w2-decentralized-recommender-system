@@ -1,0 +1,193 @@
+# Experiment Log
+
+## Preprocessing Statistics
+Anzahl spezifischer Kategorien nach dem Filtern: **182**
+
+<details>
+<summary>Klick hier für alle Kategorien</summary>
+
+- Afghan Restaurant
+- African Restaurant
+- American Restaurant
+- Antique Shop
+- Aquarium
+- Arcade
+- Arepa Restaurant
+- Argentinian Restaurant
+- Art Gallery
+- Art Museum
+- Arts & Crafts Store
+- Arts & Entertainment
+- Asian Restaurant
+- Athletic & Sport
+- Australian Restaurant
+- Automotive Shop
+- BBQ Joint
+- Bagel Shop
+- Bakery
+- Bar
+- Beach
+- Beer Garden
+- Bike Shop
+- Board Shop
+- Bookstore
+- Bowling Alley
+- Brazilian Restaurant
+- Breakfast Spot
+- Brewery
+- Bridal Shop
+- Bridge
+- Building
+- Burger Joint
+- Burrito Place
+- Café
+- Cajun / Creole Restaurant
+- Camera Store
+- Campground
+- Candy Store
+- Car Dealership
+- Caribbean Restaurant
+- Casino
+- Castle
+- Chinese Restaurant
+- City
+- Clothing Store
+- Coffee Shop
+- Comedy Club
+- Concert Hall
+- Convenience Store
+- Cosmetics Shop
+- Cuban Restaurant
+- Cupcake Shop
+- Deli / Bodega
+- Department Store
+- Dessert Shop
+- Dim Sum Restaurant
+- Diner
+- Distillery
+- Donut Shop
+- Drugstore / Pharmacy
+- Dumpling Restaurant
+- Eastern European Restaurant
+- Electronics Store
+- Ethiopian Restaurant
+- Fair
+- Falafel Restaurant
+- Fast Food Restaurant
+- Filipino Restaurant
+- Financial or Legal Service
+- Fish & Chips Shop
+- Flea Market
+- Flower Shop
+- Food
+- Food & Drink Shop
+- Food Truck
+- French Restaurant
+- Fried Chicken Joint
+- Furniture / Home Store
+- Gaming Cafe
+- Garden
+- Garden Center
+- Gastropub
+- General Entertainment
+- German Restaurant
+- Gift Shop
+- Gluten-free Restaurant
+- Government Building
+- Greek Restaurant
+- Gym / Fitness Center
+- Harbor / Marina
+- Hardware Store
+- Historic Site
+- History Museum
+- Hobby Shop
+- Hot Dog Joint
+- Hotel
+- Ice Cream Shop
+- Indian Restaurant
+- Internet Cafe
+- Italian Restaurant
+- Japanese Restaurant
+- Jewelry Store
+- Korean Restaurant
+- Latin American Restaurant
+- Mac & Cheese Joint
+- Malaysian Restaurant
+- Mall
+- Market
+- Medical Center
+- Mediterranean Restaurant
+- Mexican Restaurant
+- Middle Eastern Restaurant
+- Miscellaneous Shop
+- Mobile Phone Shop
+- Molecular Gastronomy Restaurant
+- Moroccan Restaurant
+- Motorcycle Shop
+- Movie Theater
+- Museum
+- Music Store
+- Music Venue
+- Neighborhood
+- Newsstand
+- Nightlife Spot
+- Office
+- Other Great Outdoors
+- Other Nightlife
+- Outdoors & Recreation
+- Paper / Office Supplies Store
+- Park
+- Performing Arts Venue
+- Peruvian Restaurant
+- Pet Store
+- Pizza Place
+- Planetarium
+- Playground
+- Plaza
+- Pool
+- Pool Hall
+- Portuguese Restaurant
+- Public Art
+- Racetrack
+- Ramen /  Noodle House
+- Record Shop
+- Restaurant
+- River
+- Salad Place
+- Sandwich Place
+- Scandinavian Restaurant
+- Scenic Lookout
+- Science Museum
+- Sculpture Garden
+- Seafood Restaurant
+- Shop & Service
+- Ski Area
+- Smoke Shop
+- Snack Place
+- Soup Place
+- South American Restaurant
+- Southern / Soul Food Restaurant
+- Spanish Restaurant
+- Sporting Goods Shop
+- Stadium
+- Steakhouse
+- Sushi Restaurant
+- Swiss Restaurant
+- Taco Place
+- Tapas Restaurant
+- Tea Room
+- Thai Restaurant
+- Theater
+- Thrift / Vintage Store
+- Toy / Game Store
+- Turkish Restaurant
+- Vegetarian / Vegan Restaurant
+- Video Game Store
+- Video Store
+- Vietnamese Restaurant
+- Winery
+- Wings Joint
+- Zoo
+
+</details>
+

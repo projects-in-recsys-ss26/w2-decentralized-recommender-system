@@ -1,13 +1,12 @@
 {
     "global_acc_1_spec": 15.838990554899645,
-    "global_hit_k_spec": 27.774498229043683,
+    "global_hit_k_spec": 36.083234946871315,
     "global_acc_1_lvl1": 49.118211334120424,
-    "global_hit_k_lvl1": 84.75870720188901,
-    "cluster_acc_1_spec": 19.587514757969306,
-    "cluster_hit_k_spec": 31.965761511216055,
-    "cluster_acc_1_lvl1": 55.29442148760331,
-    "cluster_hit_k_lvl1": 88.37072018890201,
-    "fsq_cat_hit_rate_at_3": 0,
-    "fsq_poi_hit_rate_at_3": 0,
-    "fsq_poi_hit_rate_at_9": 0
+    "global_hit_k_lvl1": 99.7491145218418,
+    "cluster_acc_1_spec": 20.51357733175915,
+    "cluster_hit_k_spec": 40.0383707201889,
+    "cluster_acc_1_lvl1": 55.62647579693034,
+    "cluster_hit_k_lvl1": 99.46502361275088,
+    "local_cat_hit_rate": 39.612188365650965,
+    "local_poi_hit_rate_2_per_cat": 18.09787626962142
 }
