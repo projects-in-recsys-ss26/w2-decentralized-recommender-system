@@ -3,6 +3,11 @@ from fastapi.middleware.cors import CORSMiddleware
 from datetime import datetime
 import pickle
 import os
+import sys
+
+# Füge simple_model zum Suchpfad hinzu, damit pickle die Klassen aus 'src' findet
+sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'simple_model'))
+
 import uvicorn
 import httpx
 import pandas as pd
@@ -15,9 +20,9 @@ import numpy as np
 # .env Datei laden
 load_dotenv()
 
-CATEGORY_RECOMMENDER_PATH = "trained_model.pkl"
+CATEGORY_RECOMMENDER_PATH = "./simple_model/trained_model.pkl"
 FOURSQUARE_API_KEY = os.getenv("FOURSQUARE_API_KEY")
-KMEANS_MODEL_PATH = "user_clustering_model.pkl"
+KMEANS_MODEL_PATH = "./simple_model/user_clustering_model.pkl"
 USER_FEATURES_PATH = "../data/user_partitioning.parquet"
 CHECKINS_FILE = "../data/preprocessed_checkins_nyc.parquet"
 VENUES_FILE = "../data/venues.parquet"
@@ -47,40 +52,40 @@ def load_model_on_startup():
     Es findet kein Training statt.
     """
     global category_model_dict, kmeans_clustering_model, user_features_df, checkins_df, venues_df
-    print("Starte API-Server...")
+    print("Starting API Server...")
     
     if os.path.exists(CATEGORY_RECOMMENDER_PATH):
         with open(CATEGORY_RECOMMENDER_PATH, 'rb') as f:
             category_model_dict = pickle.load(f)
-        print("=== Time-Based Modell erfolgreich aus Datei geladen! 🚀 ===")
+        print("=== Time-Based Model loaded successfully! 🚀 ===")
     else:
-        print(f"⚠️ FEHLER: '{CATEGORY_RECOMMENDER_PATH}' wurde nicht gefunden! Bitte führe zuerst main.py aus.")
+        print(f"⚠️ ERROR: '{CATEGORY_RECOMMENDER_PATH}' not found! Please run main.py first.")
         category_model_dict = {}
     
     if os.path.exists(KMEANS_MODEL_PATH):
         with open(KMEANS_MODEL_PATH, 'rb') as f:
             kmeans_clustering_model = pickle.load(f)
-        print("=== K-Means Clustering Modell erfolgreich aus Datei geladen! 🚀 ===")
+        print("=== K-Means Clustering Model loaded successfully! 🚀 ===")
     else:
-        print(f"⚠️ WARNUNG: '{KMEANS_MODEL_PATH}' wurde nicht gefunden. Cluster-basierte Recs nicht verfügbar.")
+        print(f"⚠️ WARNING: '{KMEANS_MODEL_PATH}' not found. Cluster-based recs unavailable.")
     
     if os.path.exists(USER_FEATURES_PATH):
         user_features_df = pd.read_parquet(USER_FEATURES_PATH)
-        print(f"=== User-Features geladen! ({len(user_features_df)} Users) ===")
+        print(f"=== User Features loaded! ({len(user_features_df)} Users) ===")
     else:
-        print(f"⚠️ WARNUNG: '{USER_FEATURES_PATH}' wurde nicht gefunden.")
+        print(f"⚠️ WARNING: '{USER_FEATURES_PATH}' not found.")
     
     if os.path.exists(CHECKINS_FILE):
         checkins_df = pd.read_parquet(CHECKINS_FILE)
-        print(f"=== Checkins-Daten geladen! ({len(checkins_df)} Checkins) ===")
+        print(f"=== Checkin data loaded! ({len(checkins_df)} Checkins) ===")
     else:
-        print(f"⚠️ WARNUNG: '{CHECKINS_FILE}' wurde nicht gefunden.")
+        print(f"⚠️ WARNING: '{CHECKINS_FILE}' not found.")
         
     if os.path.exists(VENUES_FILE):
         venues_df = pd.read_parquet(VENUES_FILE)
-        print(f"=== Venues-Datenbank geladen! ({len(venues_df)} Venues) ===")
+        print(f"=== Venue database loaded! ({len(venues_df)} Venues) ===")
     else:
-        print(f"⚠️ WARNUNG: '{VENUES_FILE}' wurde nicht gefunden. Bitte backend/tools/create_venue_db.py ausführen.")
+        print(f"⚠️ WARNING: '{VENUES_FILE}' not found. Please run backend/simple_model/tools/create_venue_db.py.")
 
 
 @app.get("/api/recommendations")
@@ -343,7 +348,7 @@ async def search_venues(
     print(f"🔍 Local Venue Search: query='{query}', lat={lat}, lng={lng}, radius={radius}")
     
     if venues_df is None:
-        print("❌ Venues Datenbank nicht geladen!")
+        print("❌ Venues database not loaded!")
         return {"error": "Venues Datenbank nicht geladen"}
     
     try:
@@ -352,7 +357,7 @@ async def search_venues(
         filtered_df = venues_df[venues_df['category'].str.lower() == query.lower()].copy()
         
         if filtered_df.empty:
-            print(f"⚠️ Keine Venues für Kategorie '{query}' gefunden.")
+            print(f"⚠️ No venues found for category '{query}'.")
             return {"results": []}
             
         # 2. Distanz berechnen
@@ -377,9 +382,7 @@ async def search_venues(
                 "popularity": int(place.get('checkin_count', 0)),
                 "address": "", # Historische Daten haben keine Adresse
                 "website": "", # Historische Daten haben keine Website
-            }
             formatted_results.append(formatted_place)
-            print(f"✅ Place found: {formatted_place['name']} ({formatted_place['id']}) an Distanz {formatted_place['distance']:.1f}m mit {formatted_place['popularity']} Check-ins")
             
         print(f"📤 Returning {len(formatted_results)} result(s) for '{query}'\n")
         return {"results": formatted_results}

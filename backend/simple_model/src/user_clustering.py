@@ -1,9 +1,18 @@
+import os
+# Unterdrücke Warnungen von joblib/loky auf Windows (wmic nicht gefunden) und KMeans Memory Leak
+os.environ["LOKY_MAX_CPU_COUNT"] = str(os.cpu_count() or 1)
+os.environ["OMP_NUM_THREADS"] = "1"
+
 import pandas as pd
 import numpy as np
 import pickle
+import warnings
+
+warnings.filterwarnings("ignore", message=".*memory leak.*")
+warnings.filterwarnings("ignore", message=".*physical cores.*")
+
 from sklearn.cluster import KMeans
 from sklearn.preprocessing import StandardScaler
-
 class UserPartitioningRecommender:
     """
     Trainiert ein K-Means Clustering-Modell basierend auf der Verteilung der level_1 Kategorien pro User.
@@ -29,7 +38,7 @@ class UserPartitioningRecommender:
         Returns:
             DataFrame mit user_id und prozentuale Features für die Top-9 level_1 Kategorien
         """
-        print(f"Extrahiere User-Features (Level-1 Kategorien Verteilung, inference={inference})...")
+        print(f"Extracting user features (Level-1 categories distribution, inference={inference})...")
         
         # Gruppiere nach user_id und zähle level_1 Kategorien
         user_category_counts = df.groupby(['user_id', 'level_1']).size().unstack(fill_value=0)
@@ -39,7 +48,7 @@ class UserPartitioningRecommender:
             category_totals = df['level_1'].value_counts()
             self.top_level_1_categories = category_totals.head(self.top_categories).index.tolist()
             
-            print(f"  Top-{self.top_categories} level_1 Kategorien: {self.top_level_1_categories}")
+            print(f"  Top-{self.top_categories} level_1 categories: {self.top_level_1_categories}")
         
         # Missing categories with 0
         for cat in self.top_level_1_categories:
@@ -94,7 +103,7 @@ class UserPartitioningRecommender:
         # Reset Index um user_id als Spalte zu bekommen
         user_features = user_features.reset_index()
         
-        print(f"  ✅ Extrahiert {len(self.feature_columns)} Features für {len(user_features)} unique Users")
+        print(f"  ✅ Extracted {len(self.feature_columns)} features for {len(user_features)} unique users")
         print(f"  Shape: {user_features.shape}")
         
         return user_features
@@ -109,7 +118,7 @@ class UserPartitioningRecommender:
         Returns:
             DataFrame mit user_id, Cluster-Labels und Feature-Spalten
         """
-        print("Trainiere User Partitioning Model (K-Means)...")
+        print("Training User Partitioning Model (K-Means)...")
         
         # 1. User-Features extrahieren
         user_features_df = self._extract_user_features(df)
@@ -121,15 +130,15 @@ class UserPartitioningRecommender:
         X_scaled = self.scaler.fit_transform(X)
         
         # 4. K-Means trainieren
-        print(f"Trainiere K-Means mit k={self.k} Clustern...")
+        print(f"Training K-Means with k={self.k} clusters...")
         self.kmeans = KMeans(n_clusters=self.k, random_state=42, n_init=10)
         cluster_labels = self.kmeans.fit_predict(X_scaled)
         
         # 5. Cluster-Labels zum DataFrame hinzufügen
         user_features_df['cluster'] = cluster_labels
         
-        print(f"✅ K-Means Training abgeschlossen.")
-        print(f"  Cluster-Verteilung:\n{user_features_df['cluster'].value_counts().sort_index()}")
+        print("✅ K-Means training completed.")
+        # Omit detailed cluster distribution as requested to reduce output flood
         
         return user_features_df
     

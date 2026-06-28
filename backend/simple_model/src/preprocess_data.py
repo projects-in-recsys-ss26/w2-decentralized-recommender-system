@@ -209,7 +209,7 @@ def pipeline(checkins_path: str, categories_path: str):
     df_final = filter_tourist_categories(df_final)
 
     # 5. Save Category Mapping
-    map_filepath = os.path.join("..", "data", "category_level1_map.json")
+    map_filepath = os.path.join("..", "..", "data", "category_level1_map.json")
     save_category_mapping(df_final, map_filepath)
 
     # 6. Print statistics

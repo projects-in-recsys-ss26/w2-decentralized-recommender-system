@@ -11,8 +11,8 @@ from src.evaluator import evaluate_recommender, split_data_chronologically, eval
 from src.timebased_recommender import TimeBasedBaselineRecommender
 from src.user_clustering import UserPartitioningRecommender
 
-CHECKINS_FILE = "../../data/preprocessed_checkins_nyc.parquet"
-VENUES_FILE = "../../data/venues.parquet"
+CHECKINS_FILE = "../../../data/preprocessed_checkins_nyc.parquet"
+VENUES_FILE = "../../../data/venues.parquet"
 
 def run_user_scaling_experiment(num_runs=1):
     print("\n" + "="*70)

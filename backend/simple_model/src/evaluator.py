@@ -46,7 +46,7 @@ def evaluate_recommender(model, test_df: pd.DataFrame, user_features_df: pd.Data
         silent: Boolean - Unterdrückt Konsolenausgaben
     """
     if not silent:
-        print("🚀 Starte Dual-Level Evaluierung...")
+        print("🚀 Starting dual-level evaluation...")
     
     if not pd.api.types.is_datetime64_any_dtype(test_df['utc_time']):
         test_df['utc_time'] = pd.to_datetime(test_df['utc_time'])
@@ -142,28 +142,28 @@ def evaluate_recommender(model, test_df: pd.DataFrame, user_features_df: pd.Data
     # ===== OUTPUT FORMATIEREN =====
     if not silent:
         print("\n" + "="*70)
-        print("📈 EVALUIERUNGS-ERGEBNISSE (Time-Based Baseline)")
+        print("📈 EVALUATION RESULTS (Time-Based Baseline)")
         print("="*70)
-        print(f"Test-Samples gesamt: {total}\n")
+        print(f"Total test samples: {total}\n")
         
         print("🌍 GLOBAL RECOMMENDATIONS")
         print("-" * 70)
-        print("🎯 SPEZIFISCHE KATEGORIE (z.B. Sushi Restaurant)")
+        print("🎯 SPECIFIC CATEGORY (e.g. Sushi Restaurant)")
         print(f"   Accuracy @ 1: {acc_1_spec_global:.2f}%")
         print(f"   Hit Rate @ K: {hit_k_spec_global:.2f}%\n")
-        print("🌍 LEVEL 1 KATEGORIE (z.B. Dining and Drinking)")
+        print("🌍 LEVEL 1 CATEGORY (e.g. Dining and Drinking)")
         print(f"   Accuracy @ 1: {acc_1_lvl1_global:.2f}%")
         print(f"   Hit Rate @ K: {hit_k_lvl1_global:.2f}%")
         
         if use_clusters and cluster_total > 0:
             print("\n" + "-" * 70)
-            print("🎯 CLUSTER-BASIERTE RECOMMENDATIONS (Blended System Performance)")
-            print(f"   (Evaluierte Samples gesamt: {cluster_total} / {total})")
+            print("🎯 CLUSTER-BASED RECOMMENDATIONS (Blended System Performance)")
+            print(f"   (Evaluated samples: {cluster_total} / {total})")
             print("-" * 70)
-            print("🎯 SPEZIFISCHE KATEGORIE (z.B. Sushi Restaurant)")
+            print("🎯 SPECIFIC CATEGORY (e.g. Sushi Restaurant)")
             print(f"   Accuracy @ 1: {acc_1_spec_cluster:.2f}%")
             print(f"   Hit Rate @ K: {hit_k_spec_cluster:.2f}%\n")
-            print("🌍 LEVEL 1 KATEGORIE (z.B. Dining and Drinking)")
+            print("🌍 LEVEL 1 CATEGORY (e.g. Dining and Drinking)")
             print(f"   Accuracy @ 1: {acc_1_lvl1_cluster:.2f}%")
             print(f"   Hit Rate @ K: {hit_k_lvl1_cluster:.2f}%")
             
@@ -176,8 +176,8 @@ def evaluate_recommender(model, test_df: pd.DataFrame, user_features_df: pd.Data
             lvl1_1_improvement = acc_1_lvl1_cluster - acc_1_lvl1_global
             lvl1_k_improvement = hit_k_lvl1_cluster - hit_k_lvl1_global
             
-            print(f"Spezifische @ 1: {spec_1_improvement:+.2f}% {'📈' if spec_1_improvement > 0 else '📉'}")
-            print(f"Spezifische @ K: {spec_k_improvement:+.2f}% {'📈' if spec_k_improvement > 0 else '📉'}")
+            print(f"Specific @ 1: {spec_1_improvement:+.2f}% {'📈' if spec_1_improvement > 0 else '📉'}")
+            print(f"Specific @ K: {spec_k_improvement:+.2f}% {'📈' if spec_k_improvement > 0 else '📉'}")
             print(f"Level 1 @ 1:     {lvl1_1_improvement:+.2f}% {'📈' if lvl1_1_improvement > 0 else '📉'}")
             print(f"Level 1 @ K:     {lvl1_k_improvement:+.2f}% {'📈' if lvl1_k_improvement > 0 else '📉'}")
         
@@ -211,10 +211,10 @@ def evaluate_poi_retrieval(trained_dict, test_df, user_features_df, venues_df, m
     Führt eine "Leave-One-Out" Evaluation direkt gegen die lokale venue-Datenbank durch.
     """
     if not silent:
-        print(f"\n--- Starte POI Retrieval Evaluation (Max Users: {max_users or 'ALL'}) ---")
+        print(f"\n--- Starting POI Retrieval Evaluation (Max Users: {max_users or 'ALL'}) ---")
     
     if venues_df is None or venues_df.empty:
-        print("⚠️ Keine Venues Datenbank gefunden. Überspringe POI Evaluation.")
+        print("⚠️ No Venues database found. Skipping POI Evaluation.")
         return
 
     # 1. Test-Set: Nur den absolut letzten Check-in pro User nehmen ("Leave-One-Out")
@@ -235,11 +235,9 @@ def evaluate_poi_retrieval(trained_dict, test_df, user_features_df, venues_df, m
     user_clusters = dict(zip(user_features_df['user_id'], user_features_df['cluster']))
 
     if not silent:
-        print("Frage lokale Venues Datenbank ab...")
+        print("Querying local Venues database...")
     
     for idx, (_, row) in enumerate(test_samples.iterrows()):
-        if not silent and idx % 10 == 0 and idx > 0:
-            print(f"  > Evaluiere User {idx}/{total}...")
             
         user_id = row['user_id']
         actual_cat = row['venue_category_name']  # Spezifische Kategorie für das Modell
@@ -338,17 +336,13 @@ def evaluate_poi_retrieval(trained_dict, test_df, user_features_df, venues_df, m
             
         total_evaluated += 1
 
-    print("\n" + "="*50)
-    print(f"📊 LOCAL POI RETRIEVAL RESULTS (N={total_evaluated} evaluiert von {total})")
-    print("="*50)
-    
     # Metriken in ein sauberes Dictionary packen
     cat_hit_rate = (cat_hit/total_evaluated*100) if total_evaluated > 0 else 0
     results = {"local_cat_hit_rate": cat_hit_rate}
     
     if not silent:
         print("\n" + "="*50)
-        print(f"📊 LOCAL POI RETRIEVAL RESULTS (N={total_evaluated} evaluiert von {total})")
+        print(f"📊 LOCAL POI RETRIEVAL RESULTS (N={total_evaluated} evaluated of {total})")
         print("="*50)
         print(f"🎯 Specific Category Hit Rate:            {cat_hit_rate:.1f} %")
     
@@ -356,7 +350,7 @@ def evaluate_poi_retrieval(trained_dict, test_df, user_features_df, venues_df, m
         hit_rate = (poi_hits[n]/total_evaluated*100) if total_evaluated > 0 else 0
         results[f"local_poi_hit_rate_{n}_per_cat"] = hit_rate
         if not silent:
-            print(f"📍 POI Hit Rate ({n} Places pro Cat):        {hit_rate:.1f} %")
+            print(f"📍 POI Hit Rate ({n} Places per Cat):        {hit_rate:.1f} %")
             
     if not silent:
         print("="*50 + "\n")

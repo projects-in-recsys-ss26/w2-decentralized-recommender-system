@@ -32,7 +32,7 @@ def save_model_dictionary(model_dict, filepath):
     """Hilfsmethode zum Speichern des trainierten Dictionaries"""
     with open(filepath, 'wb') as f:
         pickle.dump(model_dict, f)
-    print(f"=== Modell erfolgreich unter '{filepath}' gespeichert! 💾 ===")
+    print(f"=== Model successfully saved to '{filepath}' 💾 ===")
 
 def run_k_optimization_experiment(checkin_df, venues_df, num_runs=1):
     """
@@ -50,7 +50,7 @@ def run_k_optimization_experiment(checkin_df, venues_df, num_runs=1):
     k_values = [2, 3, 5, 8, 10, 15, 20, 30, 50]
     
     for k in k_values:
-        print(f"\n\n--- K-Optimization Experiment mit k={k} über {num_runs} Runs ---")
+        print(f"\n\n--- K-Optimization Experiment with k={k} ({num_runs} runs) ---")
         
         run_metrics_list = []
         for run_idx, seed in enumerate(seeds):
@@ -77,7 +77,7 @@ def run_k_optimization_experiment(checkin_df, venues_df, num_runs=1):
         with open("statistics/k_optimization_results.json", "w") as f:
             json.dump(results, f, indent=4)
             
-    print("\n✅ K-Optimization Experiment abgeschlossen! Ergebnisse in 'statistics/' gespeichert.")
+    print("\n✅ K-Optimization Experiment completed! Results saved to 'statistics/'.")
 
 def run_top_k_experiment(checkin_df, venues_df, num_runs=1):
     """
@@ -95,7 +95,7 @@ def run_top_k_experiment(checkin_df, venues_df, num_runs=1):
     top_k_values = [1, 2, 3, 4, 5, 6, 8, 10]
     
     for top_k in top_k_values:
-        print(f"\n\n--- Top-K Experiment mit top_k={top_k} über {num_runs} Runs ---")
+        print(f"\n\n--- Top-K Experiment with top_k={top_k} ({num_runs} runs) ---")
         
         run_metrics_list = []
         for run_idx, seed in enumerate(seeds):
@@ -121,7 +121,7 @@ def run_top_k_experiment(checkin_df, venues_df, num_runs=1):
         with open("statistics/top_k_results.json", "w") as f:
             json.dump(results, f, indent=4)
             
-    print("\n✅ Top-K Experiment abgeschlossen! Ergebnisse in 'statistics/' gespeichert.")
+    print("\n✅ Top-K Experiment completed! Results saved to 'statistics/'.")
 
 def main():
     # -- Preprocessing --------------------------------------------------------
@@ -131,7 +131,7 @@ def main():
     
     # -- Logging initialisieren -----------------------------------------------
     unique_cats = checkin_df['venue_category_name'].dropna().unique()
-    print(f"Schreibe Log-Datei mit {len(unique_cats)} verbleibenden Kategorien...")
+    print(f"Writing log file with {len(unique_cats)} remaining categories...")
     with open("log.md", "w", encoding="utf-8") as f:
         f.write("# Experiment Log\n\n")
         f.write("## Preprocessing Statistics\n")
@@ -142,7 +142,7 @@ def main():
         f.write("\n</details>\n\n")
     
     # Gefilterte Check-ins speichern, damit die API beim Validieren/Testen nicht über herausgefilterte Orte stolpert
-    print(f"Speichere bereinigte Check-ins unter '{PREPROCESSED_CHECKINS_FILE}'...")
+    print(f"Saving cleaned check-ins to '{PREPROCESSED_CHECKINS_FILE}'...")
     checkin_df.to_parquet(PREPROCESSED_CHECKINS_FILE, index=False)
     
     # -- Visualisierung -------------------------------------------------------
@@ -160,20 +160,18 @@ def main():
     user_features_df = user_clustering_model.fit(checkin_df)
     
     # 2. User-Features als Parquet speichern
-    print(f"\nSpeichere User-Features unter '{USER_FEATURES_PATH}'...")
+    print(f"\nSaving user features to '{USER_FEATURES_PATH}'...")
     user_features_df.to_parquet(USER_FEATURES_PATH, index=False)
-    print(f"✅ User-Features gespeichert!")
+    print("✅ User features saved!")
     
     # 3. K-Means Modell speichern
-    print(f"Speichere K-Means Modell unter '{KMEANS_MODEL_PATH}'...")
+    print(f"Saving K-Means model to '{KMEANS_MODEL_PATH}'...")
     save_model_dictionary(user_clustering_model, KMEANS_MODEL_PATH)
-    print(f"✅ K-Means Modell gespeichert!")
+    print("✅ K-Means model saved!")
     
     # 4. Centroid-Analyse ausgeben
-    print("\nCluster-Centroids (durchschnittliche Kategorien-Verteilung pro Cluster):")
-    print("-" * 70)
+    print("\nCluster-Centroids calculated successfully.")
     centroids_df = user_clustering_model.get_cluster_centroids()
-    print(centroids_df.to_string())
     
     # 5. Radar Chart plotten
     from src.visualize_clusters import plot_radar_chart
@@ -197,14 +195,8 @@ def main():
     # 4. Modell auf TEST-Daten evaluieren (mit Cluster-basiertem Evaluation)
     rec_metrics = evaluate_recommender(model, test_df, user_features_df=user_features_df)
 
-    # 5. Stündliche Empfehlungen ausgeben (Global + Pro Cluster)
-    print("\n" + "="*70)
-    model.print_hourly_recommendations()
-    print("\nBeispiel: Empfehlungen für Cluster 7:")
-    model.print_hourly_recommendations(user_cluster=7)
-    print("\nBeispiel: Empfehlungen für Cluster 9:")
-    model.print_hourly_recommendations(user_cluster=9)
-    print("="*70)
+    # 5. Skip verbose hourly recommendations
+    print("Hourly recommendations calculated.")
     
     # 6. Das Dictionary aus dem Modell extrahieren und speichern
     trained_dict = model.popular_specific_by_hour_and_cluster 
@@ -216,11 +208,11 @@ def main():
     print("="*70 + "\n")
     
     # Datenbank dynamisch mit User-Clustern neu aufbauen
-    print("Erstelle Venue-Datenbank mit Cluster-Visits neu...")
+    print("Rebuilding venue database with cluster visits...")
     venues_df = create_venue_db(checkin_df, user_features_df, output_path=VENUES_FILE)
     
     if venues_df is None:
-        print("⚠️ Fehler beim Erstellen der Venue-Datenbank.")
+        print("⚠️ Error creating venue database.")
     
     poi_metrics = evaluate_poi_retrieval(
         trained_dict=trained_dict, 
@@ -238,7 +230,7 @@ def main():
     standard_results = {**rec_metrics, **(poi_metrics if poi_metrics else {})}
     with open("statistics/standard_evaluation.json", "w") as f:
         json.dump(standard_results, f, indent=4)
-    print(f"\n✅ Standard-Evaluierung unter 'statistics/standard_evaluation.json' gespeichert.")
+    print("\n✅ Standard evaluation saved to 'statistics/standard_evaluation.json'.")
 
     # -------------------------------------------------------------------------
     # Visualisierungen: Performance Snapshot & Learning Curve
@@ -307,10 +299,25 @@ def main():
     plot_learning_curve(fractions, cat_hits_history, poi_hits_history, global_cat_hits_history, global_poi_hits_history, output_path="statistics/learning_curve.png")
 
     # -- K OPTIMIZATION EXPERIMENT --------------------------------------------
-    # run_k_optimization_experiment(checkin_df, venues_df)
+    run_k_optimization_experiment(checkin_df, venues_df)
     
     # -- TOP K EXPERIMENT -----------------------------------------------------
-    # run_top_k_experiment(checkin_df, venues_df)
+    run_top_k_experiment(checkin_df, venues_df)
+    
+    # -- PLOT HYPERPARAMETERS -------------------------------------------------
+    from tools.plot_hyperparameters import load_data, plot_k_optimization, plot_top_k_optimization, plot_top_places_tradeoff
+    print("\nGenerating hyperparameter plots...")
+    plots_dir = "statistics/plots"
+    os.makedirs(plots_dir, exist_ok=True)
+    
+    k_df = load_data("statistics/k_optimization_results.json")
+    if k_df is not None:
+        plot_k_optimization(k_df, plots_dir)
+    
+    top_k_df = load_data("statistics/top_k_results.json")
+    if top_k_df is not None:
+        plot_top_k_optimization(top_k_df, plots_dir)
+        plot_top_places_tradeoff(top_k_df, plots_dir)
     
     print("\n🎉 TRAINING COMPLETE!")
     print("="*70)

@@ -39,7 +39,7 @@ class TimeBasedBaselineRecommender:
             df: DataFrame mit Checkins
             user_cluster_df: Optional - DataFrame mit 'user_id' und 'cluster' Spalten
         """
-        print("Trainiere Time-Based Baseline Modell...")
+        print("Training Time-Based Baseline Model...")
         df = self._prepare_data(df)
         
         # ===== GLOBAL TRAINING (ohne Cluster) =====
@@ -54,7 +54,7 @@ class TimeBasedBaselineRecommender:
         
         # ===== CLUSTER-BASIERTES TRAINING (optional) =====
         if user_cluster_df is not None and self.use_user_clusters:
-            print("Trainiere Cluster-basierte Empfehlungen...")
+            print("Training Cluster-based Recommendations...")
             
             # Merge Cluster-Zuweisungen in den DataFrame
             df = df.merge(user_cluster_df[['user_id', 'cluster']], on='user_id', how='left')
@@ -77,11 +77,11 @@ class TimeBasedBaselineRecommender:
                     self.popular_specific_by_hour_and_cluster[cluster][hour] = hour_group['venue_category_name'].value_counts().head(self.top_k).index.tolist()
                     self.popular_level1_by_hour_and_cluster[cluster][hour] = hour_group['level_1'].value_counts().head(self.top_k).index.tolist()
             
-            print(f"✅ Cluster-basiertes Training für {len(clusters)} Cluster abgeschlossen.")
+            print(f"✅ Cluster-based training for {len(clusters)} clusters completed.")
         else:
-            print("⚠️ Kein User-Cluster DataFrame bereitgestellt oder use_user_clusters=False")
+            print("⚠️ No user cluster dataframe provided or use_user_clusters=False")
             
-        print("✅ Training abgeschlossen.")
+        print("✅ Training completed.")
 
     def recommend(self, hour: int, user_cluster: int = None) -> dict:
         """
@@ -126,7 +126,7 @@ class TimeBasedBaselineRecommender:
             title = "Top-Kategorien im Tagesverlauf (Global):"
         
         if not hour_dict:
-            print("Das Modell wurde noch nicht trainiert (Dictionary ist leer).")
+            print("Model has not been trained yet (dictionary is empty).")
             return
 
         print(f"\n{title}")
