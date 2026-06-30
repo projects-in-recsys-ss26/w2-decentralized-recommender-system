@@ -1,0 +1,11 @@
+2026-06-28 18:28:21,551:INFO: original length of dataset: 936, usernum of original dataset:937, itemnum of original dataset:35433
+
+2026-06-28 18:28:21,552:INFO: model hyperparams -> hidden_units:64, num_blocks:2, num_heads:1, dropout_rate:0.5, maxlen:100, lr:0.001
+2026-06-28 18:28:21,937:INFO: Server is successfully initialized
+2026-06-28 18:28:28,457:INFO: Clients are successfully initialized
+2026-06-28 20:00:05,576:INFO: client[0] best personalized model selected at round 98 (val NDCG@10=20.7600)
+2026-06-28 20:00:18,068:INFO: client[1] best personalized model selected at round 91 (val NDCG@10=20.5100)
+2026-06-28 20:00:30,888:INFO: client[2] best personalized model selected at round 85 (val NDCG@10=21.6400)
+2026-06-28 20:00:43,470:INFO: client[3] best personalized model selected at round 86 (val NDCG@10=21.0500)
+2026-06-28 20:00:56,258:INFO: client[4] best personalized model selected at round 100 (val NDCG@10=20.8700)
+2026-06-28 20:01:08,961:INFO: Results has saved!

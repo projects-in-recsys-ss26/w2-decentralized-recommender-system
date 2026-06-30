@@ -1,0 +1,57 @@
+{
+    // --- General / federated setup ---
+    "device": "cuda:0",              // PyTorch compute device (e.g. "cuda:0" or "cpu")
+    "algorithm": "FedKG",            // federated algorithm / server class to run
+    "dataset": "nyc",                // dataset name to load
+    "data_mode": "space",            // data partition folder under data/<mode>/<dataset> (must match a split prepared by split_data.ipynb; only "space" exists currently)
+    "num_clients": 5,                // number of federated clients
+    "n_users": 1083,                 // total number of users in the dataset
+    "rounds": 100,                   // number of federated communication rounds
+    "jr": 1.0,                       // join ratio: fraction of clients trained per round
+    "seed": 42,                      // random seed for reproducibility
+
+    // --- Model architecture ---
+    "model_name": "SASRec",          // model architecture to instantiate
+    "hidden_units": 64,              // embedding / hidden dimension
+    "maxlen": 100,                   // maximum input sequence length
+    "num_heads": 1,                  // number of self-attention heads
+    "num_blocks": 2,                 // number of transformer blocks
+    "dropout_rate": 0.5,             // dropout probability
+
+    // --- Local (client) training ---
+    "client_epochs": 6,              // local training epochs per client each round
+    "client_batch_size": 32,         // batch size for client local training
+    "lr": 0.001,                     // learning rate
+    "l2_emb": 1e-05,                 // L2 regularization on embedding parameters
+    "weight_decay": 1e-06,           // optimizer weight decay
+    "use_lr_schedule": "True",       // enable warmup + LR scheduling
+    "warmup_frac": 0.1,              // fraction of steps used for LR warmup
+    "early_stop_patience": 15,       // rounds without improvement before early stopping
+
+    // --- Loss / evaluation ---
+    "loss_type": "sampled_softmax",  // training loss ("sampled_softmax" or "bce")
+    "num_train_neg": 200,            // negative samples per positive during training
+    "num_neg": 100,                  // negative samples per positive in sampled-rank eval
+    "eval_full_rank": "True",        // evaluate over the full item set instead of sampled ranking
+
+    // --- Knowledge distillation (FedKG) ---
+    "T": 2,                          // softmax temperature for distillation
+    "kd_epochs": 1,                  // client-side knowledge-distillation epochs
+    "norm_epochs": 1,                // server-side distillation epochs
+    "lamda": 0.1,                    // client KD-vs-supervised loss mixing weight
+    "nor_lamda": 0.1,                // server KD-vs-supervised loss mixing weight
+
+    // --- ST-GAN data augmentation (OPTIONAL module) ---
+    // Training runs with and without the GAN. Both flags "False" (default) ->
+    // train on the original trajectory data only (the GAN module is never built).
+    // Set both to "True" -> pretrain the GANs, synthesise extra trajectories and
+    // train on the augmented data. The federated training logic is identical
+    // either way; only the input data changes.
+    "pretrain_gan": "False",         // "True" = pretrain the per-client ST-GANs
+    "generate_aug_data": "False",    // "True" = generate synthetic augmentation data from the GANs
+    "use_original_data": "False",    // "True" = force clients onto the raw client data even if merged/augmented files exist (true no-GAN baseline)
+    "alpha": 0.1,                    // GAN pretraining mixing weight
+    "local_n_users": 3,              // synthetic users generated per client during augmentation
+    "global_n_users": 15,            // synthetic users generated for the server during augmentation
+    "poi_size": 10000               // POI/item vocabulary size (overwritten at runtime from the data)
+}

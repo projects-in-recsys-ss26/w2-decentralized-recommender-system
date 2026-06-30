@@ -1,0 +1,8 @@
+# selected by best validation NDCG@10 (full-rank over all POIs) at round 99
+# validation NDCG@10 at selected round: 26.93
+NDCG5: 26.05, Std: 0.0
+NDCG10: 27.01, Std: 0.0
+NDCG20: 27.66, Std: 0.0
+HR5: 28.95, Std: 0.0
+HR10: 31.84, Std: 0.0
+HR20: 34.4, Std: 0.0
