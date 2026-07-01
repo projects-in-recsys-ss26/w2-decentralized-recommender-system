@@ -9,7 +9,7 @@ In this project, we use uv, so install uv or choose your favorite llm und transf
 git clone https://github.com/mattes-kraus/masterproject-decentralized-recommender-systems.git
 
 # navigate to the root of the project
-cd masterproject-decentralized-recommender-systems
+cd masterproject-decentralized-recommender-systems/backend
 
 # install dependencies
 uv venv
@@ -25,7 +25,7 @@ uv sync
 # windows:
 .venv/Scripts/activate
 
-# linux
+# linux/ mac
 source .venv/bin/activate
 
 # run the backend
