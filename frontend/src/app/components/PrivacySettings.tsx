@@ -1,5 +1,5 @@
 import React, { useState, useEffect } from "react";
-import { ChevronLeft, Shield, Eye, Map, Share2, Activity } from "lucide-react";
+import { ChevronLeft, Shield, Eye, Map, Share2, Activity, Brain, Network } from "lucide-react";
 import { useNavigate } from "react-router";
 import { Switch } from "./ui/switch";
 
@@ -9,12 +9,17 @@ export function PrivacySettings() {
   // States
   const [shareLocation, setShareLocation] = useState(true);
   const [showWarningModal, setShowWarningModal] = useState(false);
+  const [recommendationModel, setRecommendationModel] = useState<"simple" | "federated">("simple");
 
   useEffect(() => {
     // Beim Laden der Komponente den gespeicherten Wert abrufen
     const saved = localStorage.getItem("shareLocation");
     if (saved !== null) {
       setShareLocation(saved === "true");
+    }
+    const savedModel = localStorage.getItem("recommendationModel");
+    if (savedModel === "simple" || savedModel === "federated") {
+      setRecommendationModel(savedModel);
     }
   }, []);
 
@@ -114,6 +119,56 @@ export function PrivacySettings() {
                 </div>
                 <Switch defaultChecked={false} />
               </div>
+
+            </div>
+          </div>
+
+          {/* Recommendation Model Setting Group */}
+          <div className="mt-6">
+            <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3 ml-1">Recommendation Model</h3>
+            <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 space-y-4">
+              
+              <button 
+                onClick={() => { setRecommendationModel("simple"); localStorage.setItem("recommendationModel", "simple"); }}
+                className={`w-full flex items-center justify-between rounded-xl p-3 transition-colors ${
+                  recommendationModel === "simple" ? "bg-blue-50 ring-2 ring-blue-500" : "hover:bg-gray-50"
+                }`}
+              >
+                <div className="flex items-start gap-3">
+                  <Brain className={`w-5 h-5 mt-0.5 ${recommendationModel === "simple" ? "text-blue-600" : "text-gray-400"}`} />
+                  <div className="text-left">
+                    <p className={`font-medium ${recommendationModel === "simple" ? "text-blue-900" : "text-gray-900"}`}>Simple Model</p>
+                    <p className="text-xs text-gray-500 mt-0.5">Cluster-based recommendations using time &amp; category patterns</p>
+                  </div>
+                </div>
+                <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${
+                  recommendationModel === "simple" ? "border-blue-600" : "border-gray-300"
+                }`}>
+                  {recommendationModel === "simple" && <div className="w-2.5 h-2.5 rounded-full bg-blue-600" />}
+                </div>
+              </button>
+
+              <div className="h-px w-full bg-gray-100" />
+
+              <button 
+                onClick={() => { setRecommendationModel("federated"); localStorage.setItem("recommendationModel", "federated"); }}
+                className={`w-full flex items-center justify-between rounded-xl p-3 transition-colors ${
+                  recommendationModel === "federated" ? "bg-blue-50 ring-2 ring-blue-500" : "hover:bg-gray-50"
+                }`}
+              >
+                <div className="flex items-start gap-3">
+                  <Network className={`w-5 h-5 mt-0.5 ${recommendationModel === "federated" ? "text-blue-600" : "text-gray-400"}`} />
+                  <div className="text-left">
+                    <p className={`font-medium ${recommendationModel === "federated" ? "text-blue-900" : "text-gray-900"}`}>Federated Learning</p>
+                    <p className="text-xs text-gray-500 mt-0.5">Privacy-preserving FedKG model with sequential POI prediction</p>
+                  </div>
+                </div>
+                <div className={`w-5 h-5 rounded-full border-2 flex items-center justify-center flex-shrink-0 ${
+                  recommendationModel === "federated" ? "border-blue-600" : "border-gray-300"
+                }`}>
+                  {recommendationModel === "federated" && <div className="w-2.5 h-2.5 rounded-full bg-blue-600" />}
+                </div>
+              </button>
 
             </div>
           </div>

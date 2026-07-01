@@ -4,6 +4,7 @@ from datetime import datetime
 import pickle
 import os
 import sys
+import importlib.util
 
 # Füge simple_model zum Suchpfad hinzu, damit pickle die Klassen aus 'src' findet
 sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'simple_model'))
@@ -16,6 +17,21 @@ from dotenv import load_dotenv
 import asyncio
 import time
 import numpy as np
+import torch
+
+# ---------------------------------------------------------------------------
+# FedKG: pre-load the SASRec module so we can register it in sys.modules
+# right before torch.load (deferred to _load_fedkg_on_startup).  We must NOT
+# register it here at import time because simple_model's pickle.load needs
+# the real 'src' package from simple_model/src on sys.path.
+# ---------------------------------------------------------------------------
+_FEDKG_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'FedKG')
+_fedkg_models_module = None
+_fedkg_models_path = os.path.join(_FEDKG_DIR, 'src', 'models.py')
+if os.path.exists(_fedkg_models_path):
+    _spec = importlib.util.spec_from_file_location('fedkg_src_models', _fedkg_models_path)
+    _fedkg_models_module = importlib.util.module_from_spec(_spec)
+    _spec.loader.exec_module(_fedkg_models_module)
 
 # .env Datei laden
 load_dotenv()
@@ -26,6 +42,9 @@ KMEANS_MODEL_PATH = "./simple_model/user_clustering_model.pkl"
 USER_FEATURES_PATH = "../data/user_partitioning.parquet"
 CHECKINS_FILE = "../data/preprocessed_checkins_nyc.parquet"
 VENUES_FILE = "../data/venues.parquet"
+
+# --- FedKG ---
+FEDKG_DATA_PATH = os.path.join(_FEDKG_DIR, 'data', 'processed_nyc.txt')
 
 app = FastAPI()
 
@@ -44,6 +63,17 @@ kmeans_clustering_model = None
 user_features_df = None
 checkins_df = None
 venues_df = None
+
+# --- FedKG global state ---
+fedkg_model = None        # loaded SASRec model
+fedkg_user_train = {}     # user_id -> list of POI IDs (training split)
+fedkg_user_valid = {}     # user_id -> list (validation split, usually 1 item)
+fedkg_user_test = {}      # user_id -> list (test split, usually 1 item)
+fedkg_usernum = 0
+fedkg_itemnum = 0
+fedkg_user_list = []      # ordered list of user IDs present in the dataset
+fedkg_maxlen = 0          # max sequence length the model accepts
+fedkg_poi_info = {}       # poi_id -> {"category": str, "lat": float, "lng": float}
 
 @app.on_event("startup")
 def load_model_on_startup():
@@ -86,6 +116,103 @@ def load_model_on_startup():
         print(f"=== Venue database loaded! ({len(venues_df)} Venues) ===")
     else:
         print(f"⚠️ WARNING: '{VENUES_FILE}' not found. Please run backend/simple_model/tools/create_venue_db.py.")
+
+    # --- FedKG server model ---
+    _load_fedkg_on_startup()
+
+
+
+def _load_fedkg_on_startup():
+    """Load the FedKG SASRec server model and parse user sequences from the dataset."""
+    global fedkg_model, fedkg_user_train, fedkg_user_valid, fedkg_user_test
+    global fedkg_usernum, fedkg_itemnum, fedkg_user_list, fedkg_maxlen, fedkg_poi_info
+
+    # 1. Find the trained server model (latest run directory)
+    import glob
+    candidates = glob.glob(os.path.join(_FEDKG_DIR, 'output', 'Results_*', '*', '*'))
+    if not candidates:
+        print("⚠️ WARNING: No FedKG trained model found under FedKG/output/. Skipping.")
+        return
+    run_dir = max(candidates, key=os.path.getmtime)
+    model_path = os.path.join(run_dir, 'model_weight', 'server', 'best_server_model.pt')
+    if not os.path.exists(model_path):
+        print(f"⚠️ WARNING: FedKG server model not found at '{model_path}'. Skipping.")
+        return
+
+    # 2. Register FedKG's src.models in sys.modules so torch.load can
+    #    unpickle SASRec.  Done here (after simple_model's pickle.load)
+    #    to avoid shadowing simple_model's 'src' package.
+    if _fedkg_models_module is not None:
+        if 'src' in sys.modules:
+            # 'src' is the real package from simple_model – just add .models
+            sys.modules['src'].models = _fedkg_models_module
+        else:
+            import types
+            _src_pkg = types.ModuleType('src')
+            _src_pkg.__path__ = []  # make it a package
+            _src_pkg.models = _fedkg_models_module
+            sys.modules['src'] = _src_pkg
+        sys.modules['src.models'] = _fedkg_models_module
+    else:
+        print("⚠️ WARNING: FedKG src/models.py not found. Cannot unpickle SASRec.")
+        return
+
+    # 3. Load the model
+    device = 'cuda:0' if torch.cuda.is_available() else 'cpu'
+    fedkg_model = torch.load(model_path, map_location=device, weights_only=False)
+    fedkg_model.dev = device
+    fedkg_model.to(device)
+    fedkg_model.eval()
+    fedkg_maxlen = fedkg_model.pos_emb.num_embeddings
+    print(f"=== FedKG server model loaded! (device={device}, maxlen={fedkg_maxlen}) 🚀 ===")
+
+    # 3. Parse user sequences from the processed dataset (same logic as get_global_data)
+    if not os.path.exists(FEDKG_DATA_PATH):
+        print(f"⚠️ WARNING: '{FEDKG_DATA_PATH}' not found. FedKG predictions unavailable.")
+        fedkg_model = None
+        return
+
+    from collections import defaultdict
+    User = defaultdict(list)
+    user_list_temp = []
+    usernum = 0
+    itemnum = 0
+
+    with open(FEDKG_DATA_PATH, 'r', encoding='ISO-8859-1') as f:
+        for line in f:
+            parts = line.rstrip().split('\t')
+            if len(parts) < 8:
+                continue
+            u, i, v_cat_id, v_cat, lat, lon = int(parts[0]), int(parts[1]), parts[2], parts[3], float(parts[4]), float(parts[5])
+            if u in user_list_temp:
+                usernum = max(u, usernum)
+                itemnum = max(i, itemnum)
+                User[u].append(i)
+            else:
+                user_list_temp.append(u)
+                User[u].append(i)
+            # Build POI info (last seen lat/lng wins, which is fine)
+            fedkg_poi_info[i] = {"category": v_cat, "lat": lat, "lng": lon}
+
+    # The original get_global_data pops the last user (sentinel)
+    user_list_temp.pop(-1)
+
+    # Train/valid/test split (same as training code)
+    for user in user_list_temp:
+        nfeedback = len(User[user])
+        if nfeedback < 3:
+            fedkg_user_train[user] = User[user]
+            fedkg_user_valid[user] = []
+            fedkg_user_test[user] = []
+        else:
+            fedkg_user_train[user] = User[user][:-2]
+            fedkg_user_valid[user] = [User[user][-2]]
+            fedkg_user_test[user] = [User[user][-1]]
+
+    fedkg_usernum = usernum
+    fedkg_itemnum = itemnum
+    fedkg_user_list = user_list_temp
+    print(f"=== FedKG data loaded! ({len(fedkg_user_list)} users, {fedkg_itemnum} POIs) ===")
 
 
 @app.get("/api/recommendations")
@@ -382,6 +509,7 @@ async def search_venues(
                 "popularity": int(place.get('checkin_count', 0)),
                 "address": "", # Historische Daten haben keine Adresse
                 "website": "", # Historische Daten haben keine Website
+            }
             formatted_results.append(formatted_place)
             
         print(f"📤 Returning {len(formatted_results)} result(s) for '{query}'\n")
@@ -390,6 +518,148 @@ async def search_venues(
     except Exception as e:
         print(f"❌ Exception in search_venues: {str(e)}")
         return {"error": str(e)}
+
+
+# ==========================================================================
+# FedKG Endpoints
+# ==========================================================================
+
+@app.get("/api/fedkg/predict")
+def fedkg_predict(user_index: int = 0, topk: int = 10):
+    """
+    Take a user from the FedKG dataset by index, build their check-in
+    sequence (train + valid, same as test-time evaluation), run the SASRec
+    server model, and return the top-K predicted next POIs alongside the
+    ground-truth test POI.
+
+    Args:
+        user_index: Index into the FedKG user list (0-indexed)
+        topk: Number of top predictions to return (default 10)
+
+    Returns:
+        Dictionary with user info, ground truth, and ranked predictions.
+    """
+    if fedkg_model is None:
+        return {"error": "FedKG model not loaded. Train a model first (see FedKG/README.md)."}
+
+    if not fedkg_user_list:
+        return {"error": "FedKG user data not loaded."}
+
+    if user_index < 0 or user_index >= len(fedkg_user_list):
+        return {"error": f"user_index out of range. Valid range: 0 – {len(fedkg_user_list) - 1}"}
+
+    try:
+        user_id = fedkg_user_list[user_index]
+        train_seq = fedkg_user_train.get(user_id, [])
+        valid_seq = fedkg_user_valid.get(user_id, [])
+        test_seq = fedkg_user_test.get(user_id, [])
+
+        # Build the input sequence: train + valid (at test time the valid
+        # item is treated as known history, matching the evaluation code)
+        checkins = train_seq + valid_seq
+        if not checkins:
+            return {"error": f"User {user_id} has no check-in history."}
+
+        # Left-pad to maxlen (same as predict_next in predict.py)
+        seq = np.zeros([fedkg_maxlen], dtype=np.int32)
+        idx = fedkg_maxlen - 1
+        for poi in reversed(checkins):
+            if idx < 0:
+                break
+            seq[idx] = poi
+            idx -= 1
+
+        # Score against the entire POI catalog
+        device = fedkg_model.dev
+        all_items = np.arange(1, fedkg_itemnum + 1)
+        with torch.no_grad():
+            logits = fedkg_model.predict(
+                np.array([0]), np.array([seq]), all_items
+            )[0]
+        scores = logits.detach().cpu().numpy()
+
+        # Top-K POI IDs by score
+        top_idx = np.argsort(-scores)[:topk]
+        predictions = []
+        for rank, i in enumerate(top_idx, start=1):
+            poi_id = int(i + 1)
+            info = fedkg_poi_info.get(poi_id, {})
+            predictions.append({
+                "rank": rank,
+                "poi_id": poi_id,
+                "score": float(scores[i]),
+                "category": info.get("category", "Unknown"),
+                "latitude": info.get("lat"),
+                "longitude": info.get("lng"),
+            })
+
+        # Ground truth (the held-out test POI)
+        ground_truth = None
+        if test_seq:
+            gt_id = test_seq[0]
+            gt_info = fedkg_poi_info.get(gt_id, {})
+            # Where did the ground truth land in our ranking?
+            gt_score = float(scores[gt_id - 1]) if 1 <= gt_id <= len(scores) else None
+            gt_rank = int((scores > scores[gt_id - 1]).sum()) + 1 if gt_score is not None else None
+            ground_truth = {
+                "poi_id": gt_id,
+                "category": gt_info.get("category", "Unknown"),
+                "latitude": gt_info.get("lat"),
+                "longitude": gt_info.get("lng"),
+                "predicted_rank": gt_rank,
+                "predicted_score": gt_score,
+            }
+
+        # Last check-in of the input sequence (= current user position)
+        last_poi_id = checkins[-1]
+        last_poi_info = fedkg_poi_info.get(last_poi_id, {})
+        last_checkin = {
+            "poi_id": last_poi_id,
+            "category": last_poi_info.get("category", "Unknown"),
+            "latitude": last_poi_info.get("lat"),
+            "longitude": last_poi_info.get("lng"),
+        }
+
+        return {
+            "user_index": user_index,
+            "user_id": user_id,
+            "num_checkins_total": len(train_seq) + len(valid_seq) + len(test_seq),
+            "sequence_length": len(checkins),
+            "last_checkin": last_checkin,
+            "ground_truth": ground_truth,
+            "predictions": predictions,
+        }
+
+    except Exception as e:
+        print(f"❌ Exception in fedkg_predict: {str(e)}")
+        return {"error": str(e)}
+
+
+@app.get("/api/fedkg/users")
+def fedkg_users_list(limit: int = 20):
+    """
+    List available FedKG users with their sequence lengths.
+    """
+    if not fedkg_user_list:
+        return {"error": "FedKG user data not loaded."}
+
+    limit = min(limit, len(fedkg_user_list))
+    users = []
+    for idx in range(limit):
+        uid = fedkg_user_list[idx]
+        users.append({
+            "index": idx,
+            "user_id": uid,
+            "num_checkins": len(fedkg_user_train.get(uid, [])) + len(fedkg_user_valid.get(uid, [])) + len(fedkg_user_test.get(uid, [])),
+            "url": f"/api/fedkg/predict?user_index={idx}",
+        })
+
+    return {
+        "total_users": len(fedkg_user_list),
+        "total_pois": fedkg_itemnum,
+        "users": users,
+    }
+
 
 if __name__ == "__main__":
     uvicorn.run(app, host="0.0.0.0", port=8000)

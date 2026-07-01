@@ -71,7 +71,7 @@ const createRecommendationIcon = (category: string, isMatch: boolean = false) =>
   }
 
   const level1 = (categoryLevel1Map as Record<string, string>)[category]
-  let colors = bgColorMap[level1] ?? { bg: "#f9fafb", border: "#d1d5db" }
+  let colors = bgColorMap[level1] ?? { bg: "#fdf6e3", border: "#b8860b" } // Warm amber for everyday/non-tourist places
   
   if (isMatch) {
     colors = { bg: "#dcfce7", border: "#22c55e" } // Light green bg, bright green border
@@ -125,7 +125,7 @@ const LEVEL1_CONFIG = {
   "Travel and Transportation":          { icon: "flight", bg: "bg-sky-50",     badge: "bg-sky-100 text-sky-800"      },
 }
 
-const FALLBACK_CONFIG = { icon: "place", bg: "bg-gray-50", badge: "bg-gray-100 text-gray-600" }
+const FALLBACK_CONFIG = { icon: "home_work", bg: "bg-amber-50", badge: "bg-amber-100 text-amber-800" } // Everyday / non-tourist places
 
 const level1Map = categoryLevel1Map as Record<string, string>
 
@@ -174,6 +174,24 @@ export function MapView() {
   const [recommendations, setRecommendations] = useState<string[]>([]);
   const [foursquarePlaces, setFoursquarePlaces] = useState<VenuePlace[]>([]);
   const [loading, setLoading] = useState(true);
+  const [recommendationModel, setRecommendationModel] = useState<"simple" | "federated">("simple");
+
+  // Lese Modellauswahl aus localStorage (wird in PrivacySettings gesetzt)
+  useEffect(() => {
+    const savedModel = localStorage.getItem("recommendationModel");
+    if (savedModel === "simple" || savedModel === "federated") {
+      setRecommendationModel(savedModel);
+    }
+
+    // Auf Änderungen in anderen Tabs/Komponenten reagieren
+    const handleStorageChange = (e: StorageEvent) => {
+      if (e.key === "recommendationModel" && (e.newValue === "simple" || e.newValue === "federated")) {
+        setRecommendationModel(e.newValue);
+      }
+    };
+    window.addEventListener("storage", handleStorageChange);
+    return () => window.removeEventListener("storage", handleStorageChange);
+  }, []);
 
   // Berechnet die gerundete Stunde für die API (ab :30 aufrunden, sonst abrunden)
   const roundedHour = useMemo(() => {
@@ -222,29 +240,81 @@ export function MapView() {
       try {
         setLoading(true);
         setFoursquarePlaces([]); // Alte Orte löschen, bevor neue geladen werden!
-        const response = await fetch(`http://localhost:8000/api/example-user-recommendations?user_index=${userIndex}&hour=${roundedHour}`);
-        if (!response.ok) {
-          throw new Error(`HTTP error! status: ${response.status}`);
-        }
-        const data = await response.json();
-        console.log("📍 Backend Response:", data);
-        console.log("🎯 Top Kategorien:", data.recommendations["top_categories"]);
         
-        if (data.location) {
-          const lat = data.location.lat;
-          const lng = data.location.lng;
-          setActualCheckinPos([lat, lng]);
-          setUserPos([lat - 0.0035, lng - 0.0035]); // Offset für die User-Position
-          setActualCheckinName(data.location.name || "Unknown Place");
-          
-          // Zeit auf den echten Check-in synchronisieren (nur einmalig pro geladenem User)
-          if (data.location.local_time && timeSyncedUserIndexRef.current !== userIndex) {
-            setCurrentTime(new Date(data.location.local_time));
-            timeSyncedUserIndexRef.current = userIndex;
+        if (recommendationModel === "federated") {
+          // ---- Federated Learning (FedKG) Model ----
+          const response = await fetch(`http://localhost:8000/api/fedkg/predict?user_index=${userIndex}&topk=10`);
+          if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
           }
+          const data = await response.json();
+          console.log("📍 FedKG Response:", data);
+
+          if (data.error) {
+            console.error("❌ FedKG Error:", data.error);
+            setRecommendations([]);
+            return;
+          }
+
+          // FedKG-Predictions haben bereits lat/lng → direkt als Marker verwenden
+          const places: VenuePlace[] = [];
+          if (data.predictions) {
+            for (const pred of data.predictions) {
+              if (pred.latitude && pred.longitude) {
+                places.push({
+                  id: String(pred.poi_id),
+                  name: pred.category || `POI #${pred.poi_id}`,
+                  lat: pred.latitude,
+                  lng: pred.longitude,
+                  categories: [pred.category || "Unknown"],
+                });
+              }
+            }
+          }
+          console.log("🎯 FedKG Predictions als Marker:", places);
+
+          // User-Position = letzter Check-in der Input-Sequence (wo der User gerade ist)
+          if (data.last_checkin && data.last_checkin.latitude && data.last_checkin.longitude) {
+            setUserPos([data.last_checkin.latitude, data.last_checkin.longitude]);
+          }
+
+          // Ground truth = tatsächlicher nächster Check-in (Vorhersage-Ziel)
+          if (data.ground_truth && data.ground_truth.latitude && data.ground_truth.longitude) {
+            const gt = data.ground_truth;
+            setActualCheckinPos([gt.latitude, gt.longitude]);
+            setActualCheckinName(gt.category || "Unknown Place");
+          }
+
+          // Direkt Marker setzen, kein Foursquare-Search nötig
+          setFoursquarePlaces(places);
+          setRecommendations([]); // Leer lassen → Foursquare-Search wird übersprungen
+          
+        } else {
+          // ---- Simple (Cluster-based) Model ----
+          const response = await fetch(`http://localhost:8000/api/example-user-recommendations?user_index=${userIndex}&hour=${roundedHour}`);
+          if (!response.ok) {
+            throw new Error(`HTTP error! status: ${response.status}`);
+          }
+          const data = await response.json();
+          console.log("📍 Backend Response:", data);
+          console.log("🎯 Top Kategorien:", data.recommendations["top_categories"]);
+          
+          if (data.location) {
+            const lat = data.location.lat;
+            const lng = data.location.lng;
+            setActualCheckinPos([lat, lng]);
+            setUserPos([lat - 0.0035, lng - 0.0035]); // Offset für die User-Position
+            setActualCheckinName(data.location.name || "Unknown Place");
+            
+            // Zeit auf den echten Check-in synchronisieren (nur einmalig pro geladenem User)
+            if (data.location.local_time && timeSyncedUserIndexRef.current !== userIndex) {
+              setCurrentTime(new Date(data.location.local_time));
+              timeSyncedUserIndexRef.current = userIndex;
+            }
+          }
+          
+          setRecommendations(data.recommendations["top_categories"] || []);
         }
-        
-        setRecommendations(data.recommendations["top_categories"] || []);
       } catch (error) {
         console.error("❌ Fehler beim Abrufen der Empfehlungen:", error);
       } finally {
@@ -253,11 +323,11 @@ export function MapView() {
     };
 
     fetchRecommendations();
-  }, [roundedHour, userIndex]); // Abhängigkeit geändert auf roundedHour und userIndex
+  }, [roundedHour, userIndex, recommendationModel]); // Abhängigkeit geändert auf roundedHour, userIndex und recommendationModel
 
-  // Sucht lokale Orte basierend auf den erhaltenen Kategorien
+  // Sucht lokale Orte basierend auf den erhaltenen Kategorien (nur für Simple Model)
   useEffect(() => {
-    if (recommendations.length === 0) return;
+    if (recommendations.length === 0 || recommendationModel === "federated") return;
     
     let isActive = true;
 
