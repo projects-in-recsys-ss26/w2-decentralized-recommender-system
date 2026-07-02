@@ -6,6 +6,7 @@ import pandas as pd
 import numpy as np
 from src.evaluator import evaluate_recommender, split_data_chronologically, evaluate_poi_retrieval
 from src.timebased_recommender import TimeBasedBaselineRecommender
+from src.decentralized_recommender import DecentralizedRecommender
 from src.user_clustering import UserPartitioningRecommender
 from src.preprocess_data import pipeline
 from src.visualize_trajectory import plot_user_trajectory
@@ -26,6 +27,7 @@ N_PLACES_PER_CAT = 2   # n: Anzahl der empfohlenen Places pro vorhergesagter Kat
 K_PREDICTED_CATS = 5   # k: Anzahl der vorhergesagten Kategorien
 U_USER_CLUSTERS = 20   # u: Anzahl der User-Cluster
 ALPHA_CLUSTER_WEIGHT = 0.5 # alpha: Gewichtung für Cluster-Popularität vs. Globale Popularität (0.0 bis 1.0)
+EPSILON_LDP = 1.0          # epsilon: Privacy budget for LDP (lower = more private, more noise)
 # =============================================================================
 
 def save_model_dictionary(model_dict, filepath):
@@ -248,6 +250,11 @@ def main():
     global_cat_hits_history = []
     global_poi_hits_history = []
     
+    # Decentralized: one list per gossip_rounds value
+    gossip_rounds_list = [5, 10, 20]
+    dec_cat_dict = {r: [] for r in gossip_rounds_list}  # {rounds: [cat_hits]}
+    dec_poi_dict = {r: [] for r in gossip_rounds_list}  # {rounds: [poi_hits]}
+    
     for frac in fractions:
         print(f"\n▶ Trainiere Modell mit {int(frac*100)}% der verfügbaren Trainingsdaten...")
         
@@ -257,6 +264,9 @@ def main():
             poi_hits_history.append(0)
             global_cat_hits_history.append(0)
             global_poi_hits_history.append(0)
+            for r in gossip_rounds_list:
+                dec_cat_dict[r].append(0)
+                dec_poi_dict[r].append(0)
             continue
             
         # Subset vom train_df nehmen (chronologisch von Anfang an)
@@ -288,6 +298,22 @@ def main():
             alpha_cluster_weight=0.0, silent=True
         )
         
+        # --- DECENTRALIZED (Gossip + LDP) mit verschiedenen Gossip Rounds ---
+        for rounds in gossip_rounds_list:
+            dec_model = DecentralizedRecommender(top_k=K_PREDICTED_CATS, use_user_clusters=True, epsilon=EPSILON_LDP, gossip_rounds=rounds)
+            dec_model.fit(train_subset, user_cluster_df=user_features_df)
+            
+            dec_rec_metrics = evaluate_recommender(dec_model, test_df, user_features_df=user_features_df, silent=True)
+            dec_poi_metrics = evaluate_poi_retrieval(
+                dec_model.popular_specific_by_hour_and_cluster,
+                test_df, user_features_df, venues_df,
+                max_users=None, distance_threshold_meters=20, top_places_list=[N_PLACES_PER_CAT],
+                alpha_cluster_weight=ALPHA_CLUSTER_WEIGHT, silent=True
+            )
+            
+            dec_cat_dict[rounds].append(dec_rec_metrics.get('cluster_hit_k_spec', dec_rec_metrics.get('global_hit_k_spec', 0)))
+            dec_poi_dict[rounds].append(dec_poi_metrics.get(f'local_poi_hit_rate_{N_PLACES_PER_CAT}_per_cat', 0) if dec_poi_metrics else 0)
+        
         # Abspeichern der Cluster-Werte
         cat_hits_history.append(rec_metrics_sub.get('cluster_hit_k_spec', rec_metrics_sub.get('global_hit_k_spec', 0)))
         poi_hits_history.append(poi_metrics_sub.get(f'local_poi_hit_rate_{N_PLACES_PER_CAT}_per_cat', 0) if poi_metrics_sub else 0)
@@ -296,28 +322,28 @@ def main():
         global_cat_hits_history.append(rec_metrics_sub.get('global_hit_k_spec', 0))
         global_poi_hits_history.append(poi_metrics_global.get(f'local_poi_hit_rate_{N_PLACES_PER_CAT}_per_cat', 0) if poi_metrics_global else 0)
         
-    plot_learning_curve(fractions, cat_hits_history, poi_hits_history, global_cat_hits_history, global_poi_hits_history, output_path="statistics/learning_curve.png")
+    plot_learning_curve(fractions, cat_hits_history, poi_hits_history, global_cat_hits_history, global_poi_hits_history, dec_cat_dict, dec_poi_dict, output_path="statistics/learning_curve.png")
 
     # -- K OPTIMIZATION EXPERIMENT --------------------------------------------
-    run_k_optimization_experiment(checkin_df, venues_df)
+    # run_k_optimization_experiment(checkin_df, venues_df)
     
-    # -- TOP K EXPERIMENT -----------------------------------------------------
-    run_top_k_experiment(checkin_df, venues_df)
+    # # -- TOP K EXPERIMENT -----------------------------------------------------
+    # run_top_k_experiment(checkin_df, venues_df)
     
-    # -- PLOT HYPERPARAMETERS -------------------------------------------------
-    from tools.plot_hyperparameters import load_data, plot_k_optimization, plot_top_k_optimization, plot_top_places_tradeoff
-    print("\nGenerating hyperparameter plots...")
-    plots_dir = "statistics/plots"
-    os.makedirs(plots_dir, exist_ok=True)
+    # # -- PLOT HYPERPARAMETERS -------------------------------------------------
+    # from tools.plot_hyperparameters import load_data, plot_k_optimization, plot_top_k_optimization, plot_top_places_tradeoff
+    # print("\nGenerating hyperparameter plots...")
+    # plots_dir = "statistics/plots"
+    # os.makedirs(plots_dir, exist_ok=True)
     
-    k_df = load_data("statistics/k_optimization_results.json")
-    if k_df is not None:
-        plot_k_optimization(k_df, plots_dir)
+    # k_df = load_data("statistics/k_optimization_results.json")
+    # if k_df is not None:
+    #     plot_k_optimization(k_df, plots_dir)
     
-    top_k_df = load_data("statistics/top_k_results.json")
-    if top_k_df is not None:
-        plot_top_k_optimization(top_k_df, plots_dir)
-        plot_top_places_tradeoff(top_k_df, plots_dir)
+    # top_k_df = load_data("statistics/top_k_results.json")
+    # if top_k_df is not None:
+    #     plot_top_k_optimization(top_k_df, plots_dir)
+    #     plot_top_places_tradeoff(top_k_df, plots_dir)
     
     print("\n🎉 TRAINING COMPLETE!")
     print("="*70)

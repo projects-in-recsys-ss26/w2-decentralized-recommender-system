@@ -595,6 +595,23 @@ def fedkg_predict(user_index: int = 0, topk: int = 10):
 
         # Ground truth (the held-out test POI)
         ground_truth = None
+        
+        target_time_str = None
+        if checkins_df is not None:
+            user_checkins = checkins_df[checkins_df['user_id'] == user_id]
+            if len(user_checkins) > 0 and 'utc_time' in user_checkins.columns:
+                # The absolute last check-in chronologically corresponds to the test data point (GT)
+                last_df_checkin = user_checkins.sort_values('utc_time').iloc[-1]
+                try:
+                    utc_time = pd.to_datetime(last_df_checkin['utc_time'])
+                    if utc_time.tzinfo is not None:
+                        utc_time = utc_time.tz_convert(None)
+                    tz_offset = int(last_df_checkin.get('timezone_offset', 0))
+                    local_time = utc_time + pd.Timedelta(minutes=tz_offset)
+                    target_time_str = local_time.isoformat()
+                except Exception as e:
+                    print(f"Time parse error: {e}")
+
         if test_seq:
             gt_id = test_seq[0]
             gt_info = fedkg_poi_info.get(gt_id, {})
@@ -608,6 +625,7 @@ def fedkg_predict(user_index: int = 0, topk: int = 10):
                 "longitude": gt_info.get("lng"),
                 "predicted_rank": gt_rank,
                 "predicted_score": gt_score,
+                "local_time": target_time_str
             }
 
         # Last check-in of the input sequence (= current user position)

@@ -1,9 +1,10 @@
-import React, { useEffect, useState, useMemo, useRef } from "react";
-import { Navigation, MapPin, Settings, Bell, Lock, Clock, SkipForward } from "lucide-react";
+import React, { useEffect, useState, useMemo, useRef, useImperativeHandle, forwardRef } from "react";
+import { MapPin, Bell, Lock, Clock, SkipForward } from "lucide-react";
 import { useNavigate } from "react-router";
 import { MapContainer, TileLayer, Marker, Popup, useMap } from "react-leaflet";
 import L from "leaflet";
 import { useNotification } from "./NotificationContext";
+import { BottomNavBar } from "./BottomNavBar";
 import categoryLevel1Map from '../../../../data/category_level1_map.json'
 
 // Interface für die lokalen Orte im State
@@ -57,17 +58,17 @@ const createRecommendationIcon = (category: string, isMatch: boolean = false) =>
   const cfg = getCategoryConfig(category)
   
   const bgColorMap: Record<string, { bg: string; border: string }> = {
-    "Arts and Entertainment":             { bg: "#f5f3ff", border: "#a78bfa" },
-    "Business and Professional Services": { bg: "#f8fafc", border: "#94a3b8" },
-    "Community and Government":           { bg: "#eff6ff", border: "#93c5fd" },
-    "Dining and Drinking":                { bg: "#fff7ed", border: "#fdba74" },
-    "Event":                              { bg: "#fefce8", border: "#fde047" },
-    "Health and Medicine":                { bg: "#fef2f2", border: "#fca5a5" },
-    "Landmarks and Outdoors":             { bg: "#f0fdf4", border: "#86efac" },
-    "Nightlife Spot":                     { bg: "#eef2ff", border: "#a5b4fc" },
-    "Retail":                             { bg: "#fdf2f8", border: "#f0abfc" },
-    "Sports and Recreation":              { bg: "#f0fdfa", border: "#5eead4" },
-    "Travel and Transportation":          { bg: "#f0f9ff", border: "#7dd3fc" },
+    "Arts and Entertainment":             { bg: "#ede9fe", border: "#7c3aed" },
+    "Business and Professional Services": { bg: "#e2e8f0", border: "#475569" },
+    "Community and Government":           { bg: "#dbeafe", border: "#2563eb" },
+    "Dining and Drinking":                { bg: "#ffedd5", border: "#ea580c" },
+    "Event":                              { bg: "#fef9c3", border: "#ca8a04" },
+    "Health and Medicine":                { bg: "#fee2e2", border: "#dc2626" },
+    "Landmarks and Outdoors":             { bg: "#fef3e2", border: "#a16207" },
+    "Nightlife Spot":                     { bg: "#e0e7ff", border: "#4f46e5" },
+    "Retail":                             { bg: "#fce7f3", border: "#c026d3" },
+    "Sports and Recreation":              { bg: "#ccfbf1", border: "#0d9488" },
+    "Travel and Transportation":          { bg: "#e0f2fe", border: "#0284c7" },
   }
 
   const level1 = (categoryLevel1Map as Record<string, string>)[category]
@@ -155,8 +156,37 @@ function MapBoundsUpdater({ positions }: { positions: [number, number][] }) {
   return null;
 }
 
+// Komponente, die fitBounds über ein Ref nach außen exponiert
+interface MapFitBoundsControlHandle {
+  fitAllMarkers: () => void;
+}
+
+const MapFitBoundsControl = forwardRef<MapFitBoundsControlHandle, { positions: [number, number][] }>(
+  ({ positions }, ref) => {
+    const map = useMap();
+    useImperativeHandle(ref, () => ({
+      fitAllMarkers: () => {
+        if (!positions || positions.length === 0) return;
+        if (positions.length === 1) {
+          map.setView(positions[0], 14, { animate: true });
+        } else {
+          const bounds = L.latLngBounds(positions);
+          map.fitBounds(bounds, {
+            paddingTopLeft: [50, 80],
+            paddingBottomRight: [50, 160],
+            maxZoom: 16,
+            animate: true
+          });
+        }
+      }
+    }), [map, positions]);
+    return null;
+  }
+);
+
 export function MapView() {
   const navigate = useNavigate();
+  const fitBoundsRef = useRef<MapFitBoundsControlHandle>(null);
   const { triggerNotification } = useNotification();
   
   // Neuer State für den User-Index, um durch die User zu navigieren
@@ -283,6 +313,12 @@ export function MapView() {
             const gt = data.ground_truth;
             setActualCheckinPos([gt.latitude, gt.longitude]);
             setActualCheckinName(gt.category || "Unknown Place");
+            
+            // Zeit auf den Test-Check-in (Ground Truth) synchronisieren
+            if (gt.local_time && timeSyncedUserIndexRef.current !== userIndex) {
+              setCurrentTime(new Date(gt.local_time));
+              timeSyncedUserIndexRef.current = userIndex;
+            }
           }
 
           // Direkt Marker setzen, kein Foursquare-Search nötig
@@ -417,6 +453,7 @@ export function MapView() {
           style={{ height: "100%", width: "100%", zIndex: 0 }}
         >
           <MapBoundsUpdater positions={mapPositions} />
+          <MapFitBoundsControl ref={fitBoundsRef} positions={mapPositions} />
           <TileLayer
             url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"
             attribution='&copy; <a href="https://www.openstreetmap.org/copyright">OpenStreetMap</a> contributors &copy; <a href="https://carto.com/attributions">CARTO</a>'
@@ -513,24 +550,7 @@ export function MapView() {
       </div>
 
       {/* Bottom Navigation */}
-      <div className="absolute bottom-8 inset-x-6 z-[1000]">
-        <div className="bg-zinc-900/95 backdrop-blur-lg text-white rounded-[32px] px-6 py-4 flex justify-between items-center shadow-2xl border border-zinc-800">
-          <button className="flex flex-col items-center gap-1 text-white hover:text-blue-400 transition-colors">
-            <MapPin className="w-6 h-6" />
-          </button>
-          
-          <button className="w-14 h-14 bg-blue-600 rounded-full flex items-center justify-center shadow-[0_0_20px_rgba(37,99,235,0.5)] -mt-10 border-[6px] border-zinc-900 text-white transform transition-transform hover:scale-105 active:scale-95">
-            <Navigation className="w-6 h-6 -rotate-45 ml-[-2px] mt-[2px]" />
-          </button>
-
-          <button 
-            className="flex flex-col items-center gap-1 text-gray-400 hover:text-white transition-colors"
-            onClick={() => navigate('/settings')}
-          >
-            <Settings className="w-6 h-6" />
-          </button>
-        </div>
-      </div>
+      <BottomNavBar onCenterAction={() => fitBoundsRef.current?.fitAllMarkers()} />
       
       {/* Dev / Prototype Controls */}
       <div className="absolute bottom-32 right-4 flex flex-col gap-2 z-[1000]">

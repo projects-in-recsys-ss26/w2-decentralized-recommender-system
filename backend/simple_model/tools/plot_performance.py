@@ -46,24 +46,42 @@ def plot_performance_snapshot(standard_results_path="statistics/standard_evaluat
     plt.close()
     print(f"✅ Performance Snapshot gespeichert unter: {output_path}")
 
-def plot_learning_curve(fractions, cat_hits, poi_hits, global_cat_hits=None, global_poi_hits=None, output_path="statistics/learning_curve.png"):
+def plot_learning_curve(fractions, cat_hits, poi_hits, global_cat_hits=None, global_poi_hits=None, decentralized_cat_dict=None, decentralized_poi_dict=None, output_path="statistics/learning_curve.png"):
     """
     Erstellt zwei Line Charts (Category und POI), die zeigen, wie das Modell mit mehr Daten besser wird.
-    Beinhaltet einen optionalen Vergleich mit den rein globalen Metriken.
+    Beinhaltet einen optionalen Vergleich mit den rein globalen Metriken und mehreren dezentralen Varianten.
+    
+    Args:
+        decentralized_cat_dict: Optional dict {gossip_rounds: [cat_hits_per_fraction]}
+        decentralized_poi_dict: Optional dict {gossip_rounds: [poi_hits_per_fraction]}
     """
     x_percentages = [f * 100 for f in fractions]
     
+    # Color palette and markers for multiple decentralized curves (green tones)
+    dec_styles = [
+        {'color': '#2ca02c', 'marker': 'D'},
+        {'color': '#009E73', 'marker': 'P'},
+        {'color': '#66c2a5', 'marker': 'X'},
+        {'color': '#1b9e77', 'marker': 'v'},
+        {'color': '#a6d854', 'marker': 'h'},
+    ]
+    
     # 1. Category Hit Rate Plot
     plt.figure(figsize=(10, 6))
-    plt.plot(x_percentages, cat_hits, marker='o', linestyle='-', color='#0072B2', linewidth=2.5, markersize=8, label='Cluster-Based (Mix)')
+    plt.plot(x_percentages, cat_hits, marker='o', linestyle='-', color='#0072B2', linewidth=2.5, markersize=8, label='Centralized Cluster-Based')
     if global_cat_hits is not None:
-        plt.plot(x_percentages, global_cat_hits, marker='^', linestyle='--', color='#56B4E9', linewidth=2, markersize=8, label='Global-Only (Fallback)')
+        plt.plot(x_percentages, global_cat_hits, marker='^', linestyle='--', color='#56B4E9', linewidth=2, markersize=8, label='Centralized Global-Only')
+    if decentralized_cat_dict is not None:
+        for idx, (rounds, hits) in enumerate(sorted(decentralized_cat_dict.items())):
+            style = dec_styles[idx % len(dec_styles)]
+            plt.plot(x_percentages, hits, marker=style['marker'], linestyle='-.', color=style['color'],
+                     linewidth=2, markersize=8, label=f'Decentralized ({rounds} Gossip Rounds)')
     
     plt.title('Learning Curve: Category Hit Rate', fontsize=16, pad=15)
     plt.xlabel('Training Data Used [% of Total Train Set]', fontsize=14)
     plt.ylabel('Category Hit Rate [%]', fontsize=14)
     plt.grid(True, linestyle='--', alpha=0.6)
-    plt.legend(fontsize=12)
+    plt.legend(fontsize=11)
     plt.xticks(x_percentages)
     
     os.makedirs(os.path.dirname(output_path), exist_ok=True)
@@ -74,15 +92,20 @@ def plot_learning_curve(fractions, cat_hits, poi_hits, global_cat_hits=None, glo
     
     # 2. POI Hit Rate Plot
     plt.figure(figsize=(10, 6))
-    plt.plot(x_percentages, poi_hits, marker='s', linestyle='-', color='#D55E00', linewidth=2.5, markersize=8, label='Cluster-Based (Mix)')
+    plt.plot(x_percentages, poi_hits, marker='s', linestyle='-', color='#D55E00', linewidth=2.5, markersize=8, label='Centralized Cluster-Based')
     if global_poi_hits is not None:
-        plt.plot(x_percentages, global_poi_hits, marker='d', linestyle='--', color='#E69F00', linewidth=2, markersize=8, label='Global-Only (Fallback)')
+        plt.plot(x_percentages, global_poi_hits, marker='d', linestyle='--', color='#E69F00', linewidth=2, markersize=8, label='Centralized Global-Only')
+    if decentralized_poi_dict is not None:
+        for idx, (rounds, hits) in enumerate(sorted(decentralized_poi_dict.items())):
+            style = dec_styles[idx % len(dec_styles)]
+            plt.plot(x_percentages, hits, marker=style['marker'], linestyle='-.', color=style['color'],
+                     linewidth=2, markersize=8, label=f'Decentralized ({rounds} Gossip Rounds)')
         
     plt.title('Learning Curve: POI Hit Rate', fontsize=16, pad=15)
     plt.xlabel('Training Data Used [% of Total Train Set]', fontsize=14)
     plt.ylabel('POI Hit Rate [%]', fontsize=14)
     plt.grid(True, linestyle='--', alpha=0.6)
-    plt.legend(fontsize=12)
+    plt.legend(fontsize=11)
     plt.xticks(x_percentages)
     
     poi_path = output_path.replace('.png', '_poi.png')
@@ -91,3 +114,4 @@ def plot_learning_curve(fractions, cat_hits, poi_hits, global_cat_hits=None, glo
     plt.close()
     
     print(f"✅ Learning Curves gespeichert unter:\n  - {cat_path}\n  - {poi_path}")
+

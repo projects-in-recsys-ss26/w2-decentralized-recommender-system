@@ -5,3 +5,4 @@ backend/.env
 .venv
 __pycache__
 backend/simple_model/statistics
+backend/simple_model/centralized_statistics

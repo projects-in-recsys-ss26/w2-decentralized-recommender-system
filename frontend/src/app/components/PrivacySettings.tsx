@@ -2,6 +2,7 @@ import React, { useState, useEffect } from "react";
 import { ChevronLeft, Shield, Eye, Map, Share2, Activity, Brain, Network } from "lucide-react";
 import { useNavigate } from "react-router";
 import { Switch } from "./ui/switch";
+import { BottomNavBar } from "./BottomNavBar";
 
 export function PrivacySettings() {
   const navigate = useNavigate();
@@ -61,7 +62,7 @@ export function PrivacySettings() {
       </div>
 
       {/* Content */}
-      <div className="flex-1 overflow-y-auto px-6 py-6 [&::-webkit-scrollbar]:hidden" style={{ scrollbarWidth: 'none' }}>
+      <div className="flex-1 overflow-y-auto px-6 py-6 pb-28 [&::-webkit-scrollbar]:hidden" style={{ scrollbarWidth: 'none' }}>
         
         <div className="flex items-center gap-3 mb-8">
           <div className="w-12 h-12 bg-blue-100 text-blue-600 rounded-full flex items-center justify-center">
@@ -174,6 +175,9 @@ export function PrivacySettings() {
           </div>
         </div>
       </div>
+
+      {/* Bottom Navigation */}
+      <BottomNavBar />
 
       {/* Google-Style Custom Alert Modal */}
       {showWarningModal && (
