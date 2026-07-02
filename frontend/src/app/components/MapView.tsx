@@ -67,7 +67,7 @@ const createRecommendationIcon = (category: string, isMatch: boolean = false) =>
     "Landmarks and Outdoors":             { bg: "#fef3e2", border: "#a16207" },
     "Nightlife Spot":                     { bg: "#e0e7ff", border: "#4f46e5" },
     "Retail":                             { bg: "#fce7f3", border: "#c026d3" },
-    "Sports and Recreation":              { bg: "#ccfbf1", border: "#0d9488" },
+    "Sports and Recreation":              { bg: "#ecfeff", border: "#0891b2" },
     "Travel and Transportation":          { bg: "#e0f2fe", border: "#0284c7" },
   }
 
@@ -122,7 +122,7 @@ const LEVEL1_CONFIG = {
   "Landmarks and Outdoors":             { icon: "park", bg: "bg-green-50",   badge: "bg-green-100 text-green-800"  },
   "Nightlife Spot":                     { icon: "nightlife", bg: "bg-indigo-50",  badge: "bg-indigo-100 text-indigo-800"},
   "Retail":                             { icon: "shopping_bag", bg: "bg-pink-50",    badge: "bg-pink-100 text-pink-800"    },
-  "Sports and Recreation":              { icon: "sports_soccer", bg: "bg-teal-50",    badge: "bg-teal-100 text-teal-800"    },
+  "Sports and Recreation":              { icon: "fitness_center", bg: "bg-cyan-50",    badge: "bg-cyan-100 text-cyan-800"    },
   "Travel and Transportation":          { icon: "flight", bg: "bg-sky-50",     badge: "bg-sky-100 text-sky-800"      },
 }
 
