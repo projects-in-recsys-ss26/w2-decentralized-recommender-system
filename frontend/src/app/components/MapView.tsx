@@ -136,13 +136,13 @@ function getCategoryConfig(categoryName: string) {
 }
 
 // Hilfskomponente, um die Karte so zu zentrieren, dass alle Marker sichtbar sind
-function MapBoundsUpdater({ positions }: { positions: [number, number][] }) {
+function MapBoundsUpdater({ positions, mapReady }: { positions: [number, number][], mapReady: boolean }) {
   const map = useMap();
   useEffect(() => {
-    if (!positions || positions.length === 0) return;
+    if (!mapReady || !positions || positions.length === 0) return;
     
     if (positions.length === 1) {
-      map.setView(positions[0], 14);
+      map.setView(positions[0], 14, { animate: true });
     } else {
       const bounds = L.latLngBounds(positions);
       map.fitBounds(bounds, {
@@ -152,7 +152,7 @@ function MapBoundsUpdater({ positions }: { positions: [number, number][] }) {
         animate: true
       });
     }
-  }, [positions, map]);
+  }, [positions, map, mapReady]);
   return null;
 }
 
@@ -207,6 +207,7 @@ export function MapView() {
   const [recommendations, setRecommendations] = useState<string[]>([]);
   const [foursquarePlaces, setFoursquarePlaces] = useState<VenuePlace[]>([]);
   const [loading, setLoading] = useState(true);
+  const [mapReady, setMapReady] = useState(false);
   const [recommendationModel, setRecommendationModel] = useState<"simple" | "federated">("simple");
   const [demoMode, setDemoMode] = useState<boolean>(false);
 
@@ -295,6 +296,7 @@ export function MapView() {
     const fetchRecommendations = async () => {
       try {
         setLoading(true);
+        setMapReady(false);
         setFoursquarePlaces([]); // Alte Orte löschen, bevor neue geladen werden!
         
         if (recommendationModel === "federated") {
@@ -350,6 +352,7 @@ export function MapView() {
           // Direkt Marker setzen, kein Foursquare-Search nötig
           setFoursquarePlaces(places);
           setRecommendations([]); // Leer lassen → Foursquare-Search wird übersprungen
+          setMapReady(true);
           
         } else {
           // ---- Simple (Cluster-based) Model ----
@@ -375,10 +378,15 @@ export function MapView() {
             }
           }
           
-          setRecommendations(data.recommendations["top_categories"] || []);
+          const topCats = data.recommendations["top_categories"] || [];
+          setRecommendations(topCats);
+          if (topCats.length === 0) {
+            setMapReady(true);
+          }
         }
       } catch (error) {
         console.error("❌ Fehler beim Abrufen der Empfehlungen:", error);
+        setMapReady(true);
       } finally {
         setLoading(false);
       }
@@ -394,18 +402,8 @@ export function MapView() {
     let isActive = true;
 
     const fetchFoursquarePlaces = async () => {
-      const fetchedPlaces: VenuePlace[] = [];
-
-      for (let index = 0; index < recommendations.length; index++) {
-        if (!isActive) break;
-        
-        const category = recommendations[index];
-        
-        try {
-          if (index > 0) {
-            await new Promise(resolve => setTimeout(resolve, 500));
-          }
-          
+      try {
+        const fetchPromises = recommendations.map(async (category) => {
           const response = await fetch(
             `http://localhost:8000/api/venues/search?query=${encodeURIComponent(category)}&lat=${userPos[0]}&lng=${userPos[1]}&radius=750&limit=2`,
             {
@@ -415,11 +413,18 @@ export function MapView() {
           );
 
           if (!response.ok) throw new Error(`HTTP error! status: ${response.status}`);
-          
           const result = await response.json();
-          
-          // HIER GEÄNDERT: Schleife über alle gefundenen Orte (bis zu 3)
-          if (isActive && result.results && result.results.length > 0) {
+          return { category, result };
+        });
+
+        const results = await Promise.all(fetchPromises);
+        
+        if (!isActive) return;
+
+        const fetchedPlaces: VenuePlace[] = [];
+        
+        results.forEach(({ category, result }) => {
+          if (result.results && result.results.length > 0) {
             result.results.forEach((place: any) => {
               const existingPlace = fetchedPlaces.find(p => p.id === place.id);
               
@@ -439,13 +444,13 @@ export function MapView() {
               }
             });
           }
-        } catch (error) {
-          console.error(`❌ Fehler beim Abrufen der Venues für '${category}':`, error);
-        }
-      }
+        });
 
-      if (isActive) {
         setFoursquarePlaces(fetchedPlaces);
+        setMapReady(true);
+      } catch (error) {
+        console.error("❌ Fehler beim Abrufen der Venues:", error);
+        setMapReady(true);
       }
     };
 
@@ -478,7 +483,7 @@ export function MapView() {
           zoomControl={false}
           style={{ height: "100%", width: "100%", zIndex: 0 }}
         >
-          <MapBoundsUpdater positions={mapPositions} />
+          <MapBoundsUpdater positions={mapPositions} mapReady={mapReady} />
           <MapFitBoundsControl ref={fitBoundsRef} positions={mapPositions} />
           <TileLayer
             url="https://{s}.basemaps.cartocdn.com/light_all/{z}/{x}/{y}{r}.png"
