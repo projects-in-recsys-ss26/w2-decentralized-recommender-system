@@ -460,7 +460,7 @@ export function MapView() {
           />
           
           {/* User Marker (Simulierte aktuelle Position) */}
-          <Marker position={userPos} icon={createUserIcon()}>
+          <Marker position={userPos} icon={createUserIcon()} zIndexOffset={1000}>
             <Popup className="rounded-xl overflow-hidden shadow-xl border-none">
               <div className="text-center font-semibold text-gray-900 py-1">You are here<br/><span className="font-normal text-xs text-gray-500">Simulated Location</span></div>
             </Popup>
@@ -468,7 +468,7 @@ export function MapView() {
 
           {/* Actual Checkin Marker */}
           {actualCheckinPos && !hasMatchedPrediction && (
-            <Marker position={actualCheckinPos} icon={createActualCheckinIcon()}>
+            <Marker position={actualCheckinPos} icon={createActualCheckinIcon()} zIndexOffset={900}>
               <Popup className="rounded-xl overflow-hidden shadow-xl border-none">
                 <div className="text-center font-semibold text-gray-900 py-1">Actual Next Check-in<br/><span className="font-normal text-xs text-gray-500">{actualCheckinName}</span></div>
               </Popup>

@@ -157,9 +157,13 @@ def main():
     print("START USER CLUSTERING MODEL TRAINING")
     print("="*70 + "\n")
     
-    # 1. User Partitioning Modell trainieren
+    # 1. User Partitioning Modell trainieren (Zentral!)
     user_clustering_model = UserPartitioningRecommender(k=U_USER_CLUSTERS, top_categories=9)
     user_features_df = user_clustering_model.fit(checkin_df)
+    
+    # 1b. User Partitioning Modell trainieren (Dezentral!)
+    dec_clustering_model = UserPartitioningRecommender(k=U_USER_CLUSTERS, top_categories=9)
+    dec_user_features_df = dec_clustering_model.fit_decentralized(checkin_df, gossip_rounds=15, epochs=5)
     
     # 2. User-Features als Parquet speichern
     print(f"\nSaving user features to '{USER_FEATURES_PATH}'...")
@@ -301,12 +305,12 @@ def main():
         # --- DECENTRALIZED (Gossip + LDP) mit verschiedenen Gossip Rounds ---
         for rounds in gossip_rounds_list:
             dec_model = DecentralizedRecommender(top_k=K_PREDICTED_CATS, use_user_clusters=True, epsilon=EPSILON_LDP, gossip_rounds=rounds)
-            dec_model.fit(train_subset, user_cluster_df=user_features_df)
+            dec_model.fit(train_subset, user_cluster_df=dec_user_features_df)
             
-            dec_rec_metrics = evaluate_recommender(dec_model, test_df, user_features_df=user_features_df, silent=True)
+            dec_rec_metrics = evaluate_recommender(dec_model, test_df, user_features_df=dec_user_features_df, silent=True)
             dec_poi_metrics = evaluate_poi_retrieval(
                 dec_model.popular_specific_by_hour_and_cluster,
-                test_df, user_features_df, venues_df,
+                test_df, dec_user_features_df, venues_df,
                 max_users=None, distance_threshold_meters=20, top_places_list=[N_PLACES_PER_CAT],
                 alpha_cluster_weight=ALPHA_CLUSTER_WEIGHT, silent=True
             )

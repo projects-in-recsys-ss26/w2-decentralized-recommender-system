@@ -57,20 +57,20 @@ def plot_learning_curve(fractions, cat_hits, poi_hits, global_cat_hits=None, glo
     """
     x_percentages = [f * 100 for f in fractions]
     
-    # Color palette and markers for multiple decentralized curves (green tones)
+    # Color palette and markers for multiple decentralized curves (high contrast colorblind friendly)
     dec_styles = [
-        {'color': '#2ca02c', 'marker': 'D'},
-        {'color': '#009E73', 'marker': 'P'},
-        {'color': '#66c2a5', 'marker': 'X'},
-        {'color': '#1b9e77', 'marker': 'v'},
-        {'color': '#a6d854', 'marker': 'h'},
+        {'color': '#D55E00', 'marker': 'D'},  # Vermilion
+        {'color': '#009E73', 'marker': 'P'},  # Bluish Green
+        {'color': '#CC79A7', 'marker': 'X'},  # Reddish Purple
+        {'color': '#E69F00', 'marker': 'v'},  # Orange
+        {'color': '#56B4E9', 'marker': 'h'},  # Sky Blue
     ]
     
     # 1. Category Hit Rate Plot
     plt.figure(figsize=(10, 6))
-    plt.plot(x_percentages, cat_hits, marker='o', linestyle='-', color='#0072B2', linewidth=2.5, markersize=8, label='Centralized Cluster-Based')
+    plt.plot(x_percentages, cat_hits, marker='o', linestyle='-', color='#000000', linewidth=2.5, markersize=8, label='Centralized Cluster-Based')
     if global_cat_hits is not None:
-        plt.plot(x_percentages, global_cat_hits, marker='^', linestyle='--', color='#56B4E9', linewidth=2, markersize=8, label='Centralized Global-Only')
+        plt.plot(x_percentages, global_cat_hits, marker='^', linestyle='--', color='#0072B2', linewidth=2, markersize=8, label='Centralized Global-Only')
     if decentralized_cat_dict is not None:
         for idx, (rounds, hits) in enumerate(sorted(decentralized_cat_dict.items())):
             style = dec_styles[idx % len(dec_styles)]
@@ -92,9 +92,9 @@ def plot_learning_curve(fractions, cat_hits, poi_hits, global_cat_hits=None, glo
     
     # 2. POI Hit Rate Plot
     plt.figure(figsize=(10, 6))
-    plt.plot(x_percentages, poi_hits, marker='s', linestyle='-', color='#D55E00', linewidth=2.5, markersize=8, label='Centralized Cluster-Based')
+    plt.plot(x_percentages, poi_hits, marker='s', linestyle='-', color='#000000', linewidth=2.5, markersize=8, label='Centralized Cluster-Based')
     if global_poi_hits is not None:
-        plt.plot(x_percentages, global_poi_hits, marker='d', linestyle='--', color='#E69F00', linewidth=2, markersize=8, label='Centralized Global-Only')
+        plt.plot(x_percentages, global_poi_hits, marker='d', linestyle='--', color='#0072B2', linewidth=2, markersize=8, label='Centralized Global-Only')
     if decentralized_poi_dict is not None:
         for idx, (rounds, hits) in enumerate(sorted(decentralized_poi_dict.items())):
             style = dec_styles[idx % len(dec_styles)]
@@ -113,5 +113,34 @@ def plot_learning_curve(fractions, cat_hits, poi_hits, global_cat_hits=None, glo
     plt.savefig(poi_path, dpi=300)
     plt.close()
     
-    print(f"✅ Learning Curves gespeichert unter:\n  - {cat_path}\n  - {poi_path}")
+    # 3. Export Data to CSV
+    import pandas as pd
+    
+    cat_df = pd.DataFrame({
+        'Training_Data_Fraction': fractions,
+        'Centralized_Cluster_Based': cat_hits,
+    })
+    if global_cat_hits is not None:
+        cat_df['Centralized_Global_Only'] = global_cat_hits
+    if decentralized_cat_dict is not None:
+        for rounds, hits in sorted(decentralized_cat_dict.items()):
+            cat_df[f'Decentralized_{rounds}_Rounds'] = hits
+    
+    cat_csv_path = output_path.replace('.png', '_category.csv')
+    cat_df.to_csv(cat_csv_path, index=False)
+    
+    poi_df = pd.DataFrame({
+        'Training_Data_Fraction': fractions,
+        'Centralized_Cluster_Based': poi_hits,
+    })
+    if global_poi_hits is not None:
+        poi_df['Centralized_Global_Only'] = global_poi_hits
+    if decentralized_poi_dict is not None:
+        for rounds, hits in sorted(decentralized_poi_dict.items()):
+            poi_df[f'Decentralized_{rounds}_Rounds'] = hits
+            
+    poi_csv_path = output_path.replace('.png', '_poi.csv')
+    poi_df.to_csv(poi_csv_path, index=False)
+    
+    print(f"✅ Learning Curves gespeichert unter:\n  - {cat_path}\n  - {poi_path}\n  - {cat_csv_path}\n  - {poi_csv_path}")
 

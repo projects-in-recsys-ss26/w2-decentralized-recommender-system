@@ -6,3 +6,4 @@ backend/.env
 __pycache__
 backend/simple_model/statistics
 backend/simple_model/centralized_statistics
+backend/simple_model/nyc_user_map.html
