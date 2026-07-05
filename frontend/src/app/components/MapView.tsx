@@ -184,6 +184,9 @@ const MapFitBoundsControl = forwardRef<MapFitBoundsControlHandle, { positions: [
   }
 );
 
+const DEMO_USERS_SIMPLE = [4, 5, 8, 13];
+const DEMO_USERS_FEDKG = [6, 12, 17];
+
 export function MapView() {
   const navigate = useNavigate();
   const fitBoundsRef = useRef<MapFitBoundsControlHandle>(null);
@@ -205,12 +208,17 @@ export function MapView() {
   const [foursquarePlaces, setFoursquarePlaces] = useState<VenuePlace[]>([]);
   const [loading, setLoading] = useState(true);
   const [recommendationModel, setRecommendationModel] = useState<"simple" | "federated">("simple");
+  const [demoMode, setDemoMode] = useState<boolean>(false);
 
-  // Lese Modellauswahl aus localStorage (wird in PrivacySettings gesetzt)
+  // Lese Modellauswahl und demoMode aus localStorage (wird in PrivacySettings gesetzt)
   useEffect(() => {
     const savedModel = localStorage.getItem("recommendationModel");
     if (savedModel === "simple" || savedModel === "federated") {
       setRecommendationModel(savedModel);
+    }
+    const savedDemo = localStorage.getItem("demoMode");
+    if (savedDemo !== null) {
+      setDemoMode(savedDemo === "true");
     }
 
     // Auf Änderungen in anderen Tabs/Komponenten reagieren
@@ -218,10 +226,28 @@ export function MapView() {
       if (e.key === "recommendationModel" && (e.newValue === "simple" || e.newValue === "federated")) {
         setRecommendationModel(e.newValue);
       }
+      if (e.key === "demoMode") {
+        setDemoMode(e.newValue === "true");
+      }
     };
     window.addEventListener("storage", handleStorageChange);
     return () => window.removeEventListener("storage", handleStorageChange);
   }, []);
+
+  // Update initial userIndex if demoMode is enabled
+  useEffect(() => {
+    if (demoMode) {
+      if (recommendationModel === "simple") {
+        if (!DEMO_USERS_SIMPLE.includes(userIndex)) {
+          setUserIndex(DEMO_USERS_SIMPLE[0]);
+        }
+      } else {
+        if (!DEMO_USERS_FEDKG.includes(userIndex)) {
+          setUserIndex(DEMO_USERS_FEDKG[0]);
+        }
+      }
+    }
+  }, [demoMode, recommendationModel, userIndex]);
 
   // Berechnet die gerundete Stunde für die API (ab :30 aufrunden, sonst abrunden)
   const roundedHour = useMemo(() => {
@@ -555,7 +581,19 @@ export function MapView() {
       {/* Dev / Prototype Controls */}
       <div className="absolute bottom-32 right-4 flex flex-col gap-2 z-[1000]">
         <button 
-          onClick={() => setUserIndex(prev => prev + 1)}
+          onClick={() => {
+            if (demoMode) {
+              const demoArray = recommendationModel === "simple" ? DEMO_USERS_SIMPLE : DEMO_USERS_FEDKG;
+              const currentIndex = demoArray.indexOf(userIndex);
+              if (currentIndex === -1 || currentIndex === demoArray.length - 1) {
+                setUserIndex(demoArray[0]);
+              } else {
+                setUserIndex(demoArray[currentIndex + 1]);
+              }
+            } else {
+              setUserIndex(prev => prev + 1);
+            }
+          }}
           className="w-12 h-12 bg-white/90 backdrop-blur-md rounded-full shadow-[0_4px_12px_rgba(0,0,0,0.1)] border border-gray-100 flex items-center justify-center text-blue-600 hover:bg-white active:scale-95 transition-all"
           title="Next Example User"
         >

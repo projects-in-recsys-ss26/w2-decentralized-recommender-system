@@ -3,6 +3,7 @@ import { ChevronLeft, Shield, Eye, Map, Share2, Activity, Brain, Network } from 
 import { useNavigate } from "react-router";
 import { Switch } from "./ui/switch";
 import { BottomNavBar } from "./BottomNavBar";
+import { PlaySquare } from "lucide-react";
 
 export function PrivacySettings() {
   const navigate = useNavigate();
@@ -11,6 +12,7 @@ export function PrivacySettings() {
   const [shareLocation, setShareLocation] = useState(true);
   const [showWarningModal, setShowWarningModal] = useState(false);
   const [recommendationModel, setRecommendationModel] = useState<"simple" | "federated">("simple");
+  const [demoMode, setDemoMode] = useState(false);
 
   useEffect(() => {
     // Beim Laden der Komponente den gespeicherten Wert abrufen
@@ -21,6 +23,10 @@ export function PrivacySettings() {
     const savedModel = localStorage.getItem("recommendationModel");
     if (savedModel === "simple" || savedModel === "federated") {
       setRecommendationModel(savedModel);
+    }
+    const savedDemo = localStorage.getItem("demoMode");
+    if (savedDemo !== null) {
+      setDemoMode(savedDemo === "true");
     }
   }, []);
 
@@ -33,6 +39,11 @@ export function PrivacySettings() {
       setShareLocation(true);
       localStorage.setItem("shareLocation", "true");
     }
+  };
+
+  const handleDemoModeToggle = (checked: boolean) => {
+    setDemoMode(checked);
+    localStorage.setItem("demoMode", checked.toString());
   };
 
   // Wird aufgerufen, wenn im Modal "Turn off anyways" geklickt wird
@@ -171,6 +182,26 @@ export function PrivacySettings() {
                 </div>
               </button>
 
+            </div>
+          </div>
+
+          {/* App Settings Group */}
+          <div className="mt-6">
+            <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3 ml-1">App Settings</h3>
+            <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 space-y-4">
+              <div className="flex items-center justify-between">
+                <div className="flex items-start gap-3">
+                  <PlaySquare className="w-5 h-5 text-gray-400 mt-0.5" />
+                  <div>
+                    <p className="font-medium text-gray-900">Demo Mode</p>
+                    <p className="text-xs text-gray-500 mt-0.5">Showcase specific example predictions in MapView</p>
+                  </div>
+                </div>
+                <Switch 
+                  checked={demoMode} 
+                  onCheckedChange={handleDemoModeToggle} 
+                />
+              </div>
             </div>
           </div>
         </div>
