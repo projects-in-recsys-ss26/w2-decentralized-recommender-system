@@ -40,7 +40,7 @@ Follow these steps to set up and run the frontend locally:
 
 ## Viewing the Frontend
 
-Once the development server is running, the frontend will be accessible in your web browser. 
+Once the development server is running, the frontend will be accessible in your web browser. We recommend Google Chrome for optimal performance.
 
 - Open your browser and navigate to: **[http://localhost:5173](http://localhost:5173)**
 

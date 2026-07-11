@@ -55,10 +55,6 @@ Follow these steps to set up and run the backend locally:
    ```bash
    python api.py
    ```
-   Alternatively, you can run it directly with Uvicorn:
-   ```bash
-   uvicorn api:app --reload
-   ```
 
 ## API Documentation
 
@@ -93,4 +89,4 @@ cd FedKG
 # Run the training script with the tuned configuration
 python main.py --config_path configs_tuned.json
 ```
-This will start the federated training process (including server-client knowledge distillation). The best models and logs will be saved in the `FedKG/output` and `FedKG/logs` directories. For more detailed instructions on FedKG (like running with/without GANs), please refer to the `backend/FedKG/README.md`.
+This will start the federated training process (including server-client knowledge distillation). The best models and logs will be saved in the `FedKG/output` and `FedKG/logs` directories. For more detailed instructions on FedKG (like running with/without GANs), please refer to the `backend/FedKG/README.md`.
