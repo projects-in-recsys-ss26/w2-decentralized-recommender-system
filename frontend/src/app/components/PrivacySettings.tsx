@@ -10,16 +10,26 @@ export function PrivacySettings() {
 
   // States
   const [shareLocation, setShareLocation] = useState(true);
-  const [showWarningModal, setShowWarningModal] = useState(false);
+  const [sharePersonal, setSharePersonal] = useState(false);
+  const [shareExactCheckins, setShareExactCheckins] = useState(false);
+  
+  type ModalType = "location" | "personal" | "checkins" | null;
+  const [activeModal, setActiveModal] = useState<ModalType>(null);
+  
   const [recommendationModel, setRecommendationModel] = useState<"simple" | "federated">("simple");
   const [demoMode, setDemoMode] = useState(false);
 
   useEffect(() => {
     // Beim Laden der Komponente den gespeicherten Wert abrufen
-    const saved = localStorage.getItem("shareLocation");
-    if (saved !== null) {
-      setShareLocation(saved === "true");
-    }
+    const savedLoc = localStorage.getItem("shareLocation");
+    if (savedLoc !== null) setShareLocation(savedLoc === "true");
+
+    const savedPers = localStorage.getItem("sharePersonal");
+    if (savedPers !== null) setSharePersonal(savedPers === "true");
+
+    const savedCheckins = localStorage.getItem("shareExactCheckins");
+    if (savedCheckins !== null) setShareExactCheckins(savedCheckins === "true");
+
     const savedModel = localStorage.getItem("recommendationModel");
     if (savedModel === "simple" || savedModel === "federated") {
       setRecommendationModel(savedModel);
@@ -32,12 +42,28 @@ export function PrivacySettings() {
 
   const handleLocationToggle = (checked: boolean) => {
     if (!checked) {
-      // Wenn der User es AUSSCHALTEN will -> Modal anzeigen, State noch nicht ändern
-      setShowWarningModal(true);
+      setActiveModal("location");
     } else {
-      // Wenn der User es EINSCHALTEN will -> Direkt ändern
       setShareLocation(true);
       localStorage.setItem("shareLocation", "true");
+    }
+  };
+
+  const handlePersonalToggle = (checked: boolean) => {
+    if (!checked) {
+      setActiveModal("personal");
+    } else {
+      setSharePersonal(true);
+      localStorage.setItem("sharePersonal", "true");
+    }
+  };
+
+  const handleCheckinsToggle = (checked: boolean) => {
+    if (!checked) {
+      setActiveModal("checkins");
+    } else {
+      setShareExactCheckins(true);
+      localStorage.setItem("shareExactCheckins", "true");
     }
   };
 
@@ -46,18 +72,53 @@ export function PrivacySettings() {
     localStorage.setItem("demoMode", checked.toString());
   };
 
-  // Wird aufgerufen, wenn im Modal "Turn off anyways" geklickt wird
   const confirmTurnOff = () => {
-    setShareLocation(false);
-    localStorage.setItem("shareLocation", "false");
-    setShowWarningModal(false);
+    if (activeModal === "location") {
+      setShareLocation(false);
+      localStorage.setItem("shareLocation", "false");
+    } else if (activeModal === "personal") {
+      setSharePersonal(false);
+      localStorage.setItem("sharePersonal", "false");
+    } else if (activeModal === "checkins") {
+      setShareExactCheckins(false);
+      localStorage.setItem("shareExactCheckins", "false");
+    }
+    setActiveModal(null);
   };
 
-  // Wird aufgerufen, wenn im Modal "Share location" geklickt wird
   const cancelTurnOff = () => {
-    setShowWarningModal(false);
-    // Switch bleibt auf "true", da der State nicht geändert wurde
+    setActiveModal(null);
   };
+
+  const getModalContent = () => {
+    switch (activeModal) {
+      case "location":
+        return {
+          title: "Turn off location sharing?",
+          text: "Please note that disabling background location access will prevent the app from sending you timely recommendations and notifications while you are not actively using it.",
+          confirmBtn: "Turn off anyways",
+          cancelBtn: "Keep sharing"
+        };
+      case "personal":
+        return {
+          title: "Stop sharing personal info?",
+          text: "By withholding your personal information, you limit our ability to improve the recommendation algorithms for the broader community. However, the quality of your own recommendations will remain unaffected.",
+          confirmBtn: "Turn off anyways",
+          cancelBtn: "Keep sharing"
+        };
+      case "checkins":
+        return {
+          title: "Turn off exact check-ins?",
+          text: "Disabling exact check-in sharing will not prevent you from receiving notifications, but it may significantly reduce the accuracy and relevance of your personalized recommendations.",
+          confirmBtn: "Turn off anyways",
+          cancelBtn: "Keep sharing"
+        };
+      default:
+        return null;
+    }
+  };
+
+  const modalContent = getModalContent();
 
   return (
     <div className="w-full h-full bg-gray-50 flex flex-col relative">
@@ -92,14 +153,13 @@ export function PrivacySettings() {
             <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 space-y-4">
               
               <div className="flex items-center justify-between">
-                <div className="flex items-start gap-3">
-                  <Map className="w-5 h-5 text-gray-400 mt-0.5" />
+                <div className="flex items-start gap-4">
+                  <Map className="w-5 h-5 text-gray-400 mt-0.5 shrink-0" />
                   <div>
                     <p className="font-medium text-gray-900">Current Location</p>
-                    <p className="text-xs text-gray-500 mt-0.5">Allow app to share your exact position</p>
+                    <p className="text-xs text-gray-500 mt-0.5">Allow app to track your position in the background</p>
                   </div>
                 </div>
-                {/* Switch an den State anbinden */}
                 <Switch 
                   checked={shareLocation} 
                   onCheckedChange={handleLocationToggle} 
@@ -109,27 +169,33 @@ export function PrivacySettings() {
               <div className="h-px w-full bg-gray-100" />
 
               <div className="flex items-center justify-between">
-                <div className="flex items-start gap-3">
-                  <Eye className="w-5 h-5 text-gray-400 mt-0.5" />
+                <div className="flex items-start gap-4">
+                  <Eye className="w-5 h-5 text-gray-400 mt-0.5 shrink-0" />
                   <div>
                     <p className="font-medium text-gray-900">Personal Information</p>
                     <p className="text-xs text-gray-500 mt-0.5">Share details like age, sex, and more</p>
                   </div>
                 </div>
-                <Switch defaultChecked={false} />
+                <Switch 
+                  checked={sharePersonal}
+                  onCheckedChange={handlePersonalToggle} 
+                />
               </div>
 
               <div className="h-px w-full bg-gray-100" />
 
               <div className="flex items-center justify-between">
-                <div className="flex items-start gap-3">
-                  <Activity className="w-5 h-5 text-gray-400 mt-0.5" />
+                <div className="flex items-start gap-4">
+                  <Activity className="w-5 h-5 text-gray-400 mt-0.5 shrink-0" />
                   <div>
                     <p className="font-medium text-gray-900">Share Exact Check-ins</p>
                     <p className="text-xs text-gray-500 mt-0.5">Allow saving your precise check-in locations instead of just the venue categories.</p>
                   </div>
                 </div>
-                <Switch defaultChecked={false} />
+                <Switch 
+                  checked={shareExactCheckins}
+                  onCheckedChange={handleCheckinsToggle} 
+                />
               </div>
 
             </div>
@@ -138,18 +204,18 @@ export function PrivacySettings() {
           {/* Recommendation Model Setting Group */}
           <div className="mt-6">
             <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3 ml-1">Recommendation Model</h3>
-            <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 space-y-4">
+            <div className="bg-white rounded-2xl p-1 shadow-sm border border-gray-100 space-y-0.5">
               
               <button 
                 onClick={() => { setRecommendationModel("simple"); localStorage.setItem("recommendationModel", "simple"); }}
-                className={`w-full flex items-center justify-between rounded-xl p-3 transition-colors ${
+                className={`w-full flex items-center justify-between gap-4 rounded-xl p-3 transition-colors ${
                   recommendationModel === "simple" ? "bg-blue-50 ring-2 ring-blue-500" : "hover:bg-gray-50"
                 }`}
               >
-                <div className="flex items-start gap-3">
-                  <Brain className={`w-5 h-5 mt-0.5 ${recommendationModel === "simple" ? "text-blue-600" : "text-gray-400"}`} />
+                <div className="flex items-start gap-4">
+                  <Brain className={`w-5 h-5 mt-0.5 shrink-0 ${recommendationModel === "simple" ? "text-blue-600" : "text-gray-400"}`} />
                   <div className="text-left">
-                    <p className={`font-medium ${recommendationModel === "simple" ? "text-blue-900" : "text-gray-900"}`}>Simple Model</p>
+                    <p className={`font-medium ${recommendationModel === "simple" ? "text-blue-900" : "text-gray-900"}`}>Category Gossip</p>
                     <p className="text-xs text-gray-500 mt-0.5">Cluster-based recommendations using time &amp; category patterns</p>
                   </div>
                 </div>
@@ -160,16 +226,16 @@ export function PrivacySettings() {
                 </div>
               </button>
 
-              <div className="h-px w-full bg-gray-100" />
+              <div className="h-px mx-3 bg-gray-100" />
 
               <button 
                 onClick={() => { setRecommendationModel("federated"); localStorage.setItem("recommendationModel", "federated"); }}
-                className={`w-full flex items-center justify-between rounded-xl p-3 transition-colors ${
+                className={`w-full flex items-center justify-between gap-4 rounded-xl p-3 transition-colors ${
                   recommendationModel === "federated" ? "bg-blue-50 ring-2 ring-blue-500" : "hover:bg-gray-50"
                 }`}
               >
-                <div className="flex items-start gap-3">
-                  <Network className={`w-5 h-5 mt-0.5 ${recommendationModel === "federated" ? "text-blue-600" : "text-gray-400"}`} />
+                <div className="flex items-start gap-4">
+                  <Network className={`w-5 h-5 mt-0.5 shrink-0 ${recommendationModel === "federated" ? "text-blue-600" : "text-gray-400"}`} />
                   <div className="text-left">
                     <p className={`font-medium ${recommendationModel === "federated" ? "text-blue-900" : "text-gray-900"}`}>Federated Learning</p>
                     <p className="text-xs text-gray-500 mt-0.5">Privacy-preserving FedKG model with sequential POI prediction</p>
@@ -190,8 +256,8 @@ export function PrivacySettings() {
             <h3 className="text-xs font-bold text-gray-400 uppercase tracking-wider mb-3 ml-1">App Settings</h3>
             <div className="bg-white rounded-2xl p-4 shadow-sm border border-gray-100 space-y-4">
               <div className="flex items-center justify-between">
-                <div className="flex items-start gap-3">
-                  <PlaySquare className="w-5 h-5 text-gray-400 mt-0.5" />
+                <div className="flex items-start gap-4">
+                  <PlaySquare className="w-5 h-5 text-gray-400 mt-0.5 shrink-0" />
                   <div>
                     <p className="font-medium text-gray-900">Demo Mode</p>
                     <p className="text-xs text-gray-500 mt-0.5">Showcase specific example predictions in MapView</p>
@@ -211,27 +277,27 @@ export function PrivacySettings() {
       <BottomNavBar />
 
       {/* Google-Style Custom Alert Modal */}
-      {showWarningModal && (
-        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 px-4 animate-in fade-in duration-200">
-          <div className="bg-white rounded-2xl p-6 max-w-sm w-full shadow-2xl">
+      {activeModal && modalContent && (
+        <div className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 animate-in fade-in duration-200">
+          <div className="bg-white rounded-3xl p-6 w-[82%] max-w-[320px] shadow-2xl">
             <h3 className="text-[1.15rem] font-medium text-gray-900 mb-3">
-              Turn off location sharing?
+              {modalContent.title}
             </h3>
             <p className="text-sm text-gray-600 mb-6 leading-relaxed">
-              Attention: Without sharing your location with our server, your device must perform location searches itself, potentially increasing your mobile data usage.
+              {modalContent.text}
             </p>
             <div className="flex justify-end gap-2">
               <button
                 onClick={confirmTurnOff}
                 className="px-4 py-2.5 rounded-full text-sm font-medium text-gray-700 bg-gray-100 hover:bg-gray-200 transition-colors"
               >
-                Turn off anyways
+                {modalContent.confirmBtn}
               </button>
               <button
                 onClick={cancelTurnOff}
                 className="px-4 py-2.5 rounded-full text-sm font-medium text-white bg-[#1a73e8] hover:bg-blue-700 transition-colors"
               >
-                Share location
+                {modalContent.cancelBtn}
               </button>
             </div>
           </div>

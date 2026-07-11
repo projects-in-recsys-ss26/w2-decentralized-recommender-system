@@ -6,8 +6,8 @@ import os
 import sys
 import importlib.util
 
-# Füge simple_model zum Suchpfad hinzu, damit pickle die Klassen aus 'src' findet
-sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'simple_model'))
+# Füge category_gossip zum Suchpfad hinzu, damit pickle die Klassen aus 'src' findet
+sys.path.append(os.path.join(os.path.dirname(os.path.abspath(__file__)), 'category_gossip'))
 
 import uvicorn
 import httpx
@@ -22,8 +22,8 @@ import torch
 # ---------------------------------------------------------------------------
 # FedKG: pre-load the SASRec module so we can register it in sys.modules
 # right before torch.load (deferred to _load_fedkg_on_startup).  We must NOT
-# register it here at import time because simple_model's pickle.load needs
-# the real 'src' package from simple_model/src on sys.path.
+# register it here at import time because category_gossip's pickle.load needs
+# the real 'src' package from category_gossip/src on sys.path.
 # ---------------------------------------------------------------------------
 _FEDKG_DIR = os.path.join(os.path.dirname(os.path.abspath(__file__)), 'FedKG')
 _fedkg_models_module = None
@@ -36,9 +36,9 @@ if os.path.exists(_fedkg_models_path):
 # .env Datei laden
 load_dotenv()
 
-CATEGORY_RECOMMENDER_PATH = "./simple_model/trained_model.pkl"
+CATEGORY_RECOMMENDER_PATH = "./category_gossip/trained_model.pkl"
 FOURSQUARE_API_KEY = os.getenv("FOURSQUARE_API_KEY")
-KMEANS_MODEL_PATH = "./simple_model/user_clustering_model.pkl"
+KMEANS_MODEL_PATH = "./category_gossip/user_clustering_model.pkl"
 USER_FEATURES_PATH = "../data/user_partitioning.parquet"
 CHECKINS_FILE = "../data/preprocessed_checkins_nyc.parquet"
 VENUES_FILE = "../data/venues.parquet"
@@ -115,7 +115,7 @@ def load_model_on_startup():
         venues_df = pd.read_parquet(VENUES_FILE)
         print(f"=== Venue database loaded! ({len(venues_df)} Venues) ===")
     else:
-        print(f"⚠️ WARNING: '{VENUES_FILE}' not found. Please run backend/simple_model/tools/create_venue_db.py.")
+        print(f"⚠️ WARNING: '{VENUES_FILE}' not found. Please run backend/category_gossip/tools/create_venue_db.py.")
 
     # --- FedKG server model ---
     _load_fedkg_on_startup()
@@ -139,12 +139,12 @@ def _load_fedkg_on_startup():
         print(f"⚠️ WARNING: FedKG server model not found at '{model_path}'. Skipping.")
         return
 
-    # 2. Register FedKG's src.models in sys.modules so torch.load can
-    #    unpickle SASRec.  Done here (after simple_model's pickle.load)
-    #    to avoid shadowing simple_model's 'src' package.
+    # 2) Dynamically load the 'models' module from FedKG's src folder to
+    #    unpickle SASRec.  Done here (after category_gossip's pickle.load)
+    #    to avoid shadowing category_gossip's 'src' package.
     if _fedkg_models_module is not None:
         if 'src' in sys.modules:
-            # 'src' is the real package from simple_model – just add .models
+            # 'src' is the real package from category_gossip – just add .models
             sys.modules['src'].models = _fedkg_models_module
         else:
             import types

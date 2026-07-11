@@ -1,9 +1,9 @@
-backend/simple_model/dataset_tsmc2014/
+backend/category_gossip/dataset_tsmc2014/
 frontend/node_modules
 frontend/.env
 backend/.env
 .venv
 __pycache__
-backend/simple_model/statistics
-backend/simple_model/centralized_statistics
-backend/simple_model/nyc_user_map.html
+backend/category_gossip/statistics
+backend/category_gossip/centralized_statistics
+backend/category_gossip/nyc_user_map.html
