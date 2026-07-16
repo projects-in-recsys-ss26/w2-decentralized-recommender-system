@@ -18,6 +18,12 @@ Because location data is very sensitive, we want to protect your privacy! That's
 
 Here is a glimpse of the application in action.
 
+### Video Demonstration
+
+<video src="./docs/submission_video_all_features.mp4" controls="controls" style="max-width: 100%;">
+  Your browser does not support the video tag.
+</video>
+
 ### 1. Category Gossip Recommendation
 Here you can see the recommendations the category gossip model would give for a sample user. We built his user features based on his checkins, leaving the last checkin out. Also we trained the category recommender with his data but the last checkin. Then, based on the last checkin location and time, we predicted his user cluster and recommended 5 categories and 2 places per category in his vicinity. 
 
