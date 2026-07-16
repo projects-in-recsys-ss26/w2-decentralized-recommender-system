@@ -6,7 +6,6 @@ This is the backend component for the Decentralized Recommender Systems prototyp
 This project is built using:
 - **Python 3.13+**
 - **FastAPI** (Web framework for building APIs)
-- **Uvicorn** (ASGI server)
 - **PyTorch** (Machine Learning framework used for models like FedKG)
 - **Pandas & Scikit-learn** (Data processing and analysis)
 - **uv** (Extremely fast Python package installer and resolver)
